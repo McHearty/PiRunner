@@ -13,6 +13,7 @@ export interface PiSessionLike {
 export type PiSessionFactory = (options: {
   cwd: string;
   systemPrompt: string;
+  invocationId: string;
   onTextDelta?: (delta: string) => void;
   onToolCall?: (toolName: string, args: Record<string, unknown>) => Promise<boolean>;
 }) => Promise<PiSessionLike>;
@@ -28,15 +29,22 @@ export class PiAgentRunner implements AgentRunner {
     private readonly sessionFactory?: PiSessionFactory
   ) {}
 
-  public getActiveInvocation(): AgentInvocation | undefined {
-    // Return latest active invocation
-    const entries = Array.from(this.activeInvocations.values());
-    return entries[entries.length - 1];
+  public getInvocation(invocationId: string): AgentInvocation | undefined {
+    return this.activeInvocations.get(invocationId);
   }
 
-  public authorizeToolCall(toolName: string, args: Record<string, unknown>, invocationId?: string): boolean {
-    const invocation = invocationId ? this.activeInvocations.get(invocationId) : this.getActiveInvocation();
-    const agentId = invocation ? invocation.agentId : '0000';
+  // FAIL CLOSED: Invocation ID is mandatory. No global or latest-active fallback (§51, §52)
+  public authorizeToolCall(toolName: string, args: Record<string, unknown>, invocationId: string): boolean {
+    if (!invocationId) {
+      return false; // Fail closed: unidentifiable invocation
+    }
+
+    const invocation = this.activeInvocations.get(invocationId);
+    if (!invocation) {
+      return false; // Fail closed: unresolvable or inactive invocation
+    }
+
+    const agentId = invocation.agentId;
 
     if (toolName === 'write' || toolName === 'edit') {
       const filePath = (args.path || args.filePath || '') as string;
@@ -72,6 +80,7 @@ export class PiAgentRunner implements AgentRunner {
     this.eventQueues.set(invocation.invocationId, []);
     this.activeInvocations.set(invocation.invocationId, invocation);
 
+    // Strictly invocation-scoped toolInterceptor bound to invocation.invocationId (§51, §52)
     const toolInterceptor = async (toolName: string, args: Record<string, unknown>): Promise<boolean> => {
       const allowed = this.authorizeToolCall(toolName, args, invocation.invocationId);
       if (!allowed) {
@@ -90,6 +99,7 @@ export class PiAgentRunner implements AgentRunner {
       const session = await this.sessionFactory({
         cwd: this.workspaceRoot,
         systemPrompt,
+        invocationId: invocation.invocationId,
         onTextDelta: (delta: string) => {
           accumulatedOutput += delta;
           this.emitEvent(invocation.invocationId, {
@@ -118,7 +128,6 @@ export class PiAgentRunner implements AgentRunner {
       try {
         const piModule: any = await import('@earendil-works/pi-coding-agent');
         if (typeof piModule.createAgentSession === 'function') {
-          // Pass DefaultResourceLoader with toolInterceptor to real Pi session (§4.1)
           let resourceLoader: any = undefined;
           if (typeof piModule.DefaultResourceLoader === 'function') {
             resourceLoader = new piModule.DefaultResourceLoader({

@@ -131,20 +131,11 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   }
 
-  // Unified Tool Authorization: Delegated to AgentRunner Authority (§51, §52)
-  pi.on('tool_call', async (call) => {
-    const allowed = agentRunner.authorizeToolCall(call.toolName, call.args);
-    if (!allowed) {
-      throw new Error(`[HITM Capability Violation]: Tool execution '${call.toolName}' denied by active authority policy.`);
-    }
-  });
-
   pi.registerCommand('hitm-status', {
     description: 'Display current HITM state, mode, active agent, and test lock status',
     handler: async (_args: string, ctx: ExtensionContext) => {
       const state = controller.getState();
-      const activeInvocation = agentRunner.getActiveInvocation();
-      const currentAgent = activeInvocation ? activeInvocation.agentId : syncAgentToState(state);
+      const currentAgent = syncAgentToState(state);
       const lock = TestSuiteLock.loadLock();
       const lockSummary = lock ? `Locked (${lock.testSuiteContentHash.slice(0, 8)})` : 'Unlocked';
       ctx.ui.notify(
@@ -157,8 +148,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   pi.registerCommand('hitm-prompt', {
     description: 'View layered governance sub-prompt for the active agent',
     handler: async (_args: string, ctx: ExtensionContext) => {
-      const activeInvocation = agentRunner.getActiveInvocation();
-      const currentAgent = activeInvocation ? activeInvocation.agentId : syncAgentToState(controller.getState());
+      const currentAgent = syncAgentToState(controller.getState());
       const prompt = AgentPromptFactory.createAgentSystemPrompt(currentAgent);
       ctx.ui.notify(`Active Sub-Prompt Loaded for Agent ${currentAgent} (${prompt.length} chars)`, 'info');
     }
