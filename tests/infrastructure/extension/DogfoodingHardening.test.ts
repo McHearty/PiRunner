@@ -1,4 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
+import { join } from 'node:path';
+import { mkdirSync, rmSync, existsSync } from 'node:fs';
 import { GitRepository } from '../../../src/infrastructure/git/GitRepository.js';
 import { TestSuiteLock } from '../../../src/domain/testing/TestSuiteLock.js';
 import { StateRecoveryService } from '../../../src/domain/project/StateRecovery.js';
@@ -6,6 +8,15 @@ import { StateValidationService } from '../../../src/domain/project/StateValidat
 import { EventStore } from '../../../src/domain/events/EventStore.js';
 
 describe('Dogfooding Enforcement Hardening (Normative §19, §20, §30, §53)', () => {
+  const hermeticDir = join(process.cwd(), '.hitm', 'hermetic-test-lock');
+  if (!existsSync(hermeticDir)) {
+    mkdirSync(hermeticDir, { recursive: true });
+  }
+
+  afterAll(() => {
+    rmSync(hermeticDir, { recursive: true, force: true });
+  });
+
   it('GitRepository queries fresh repository status and commit verification', () => {
     const git = new GitRepository(process.cwd());
     const snap = git.getFreshSnapshot();
@@ -17,7 +28,7 @@ describe('Dogfooding Enforcement Hardening (Normative §19, §20, §30, §53)', 
     expect(git.verifyCommit('invalid-sha-1234')).toBe(false);
   });
 
-  it('TestSuiteLock creates and loads authoritative lock file', () => {
+  it('TestSuiteLock creates and loads authoritative lock in isolated directory (Hermetic)', () => {
     const mockLock = {
       workflowId: 'wf-lock-test',
       testSpecificationArtifactId: 'art-spec-1',
@@ -26,8 +37,9 @@ describe('Dogfooding Enforcement Hardening (Normative §19, §20, §30, §53)', 
       fileCount: 3
     };
 
-    TestSuiteLock.createLock(mockLock);
-    const loaded = TestSuiteLock.loadLock();
+    // Hermetic: write to isolated test directory, NEVER mutating canonical repo lock
+    TestSuiteLock.createLock(mockLock, hermeticDir);
+    const loaded = TestSuiteLock.loadLock(hermeticDir);
 
     expect(loaded).toBeDefined();
     expect(loaded?.testSuiteContentHash).toBe(mockLock.testSuiteContentHash);
@@ -39,14 +51,12 @@ describe('Dogfooding Enforcement Hardening (Normative §19, §20, §30, §53)', 
     const emptyRecovery = StateRecoveryService.recover(eventStore, 'wf-empty');
     expect(emptyRecovery.recovered).toBe(false);
 
-    // Mock successful recovery in COMMIT_CREATED state
     const recoveryResult = {
       recovered: true,
       canonicalState: 'COMMIT_CREATED' as const,
       eventCount: 5
     };
 
-    // Dirty repository in COMMIT_CREATED must produce MISMATCH
     const dirtyRepo = {
       branch: 'main',
       headSha: '1111222233334444555566667777888899990000',

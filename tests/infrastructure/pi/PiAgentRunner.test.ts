@@ -19,7 +19,8 @@ describe('PiAgentRunner Hexagonal Adapter (Normative §4.1, §35)', () => {
     const mockSession: PiSessionLike = {
       prompt: vi.fn().mockResolvedValue(undefined),
       abort: vi.fn().mockResolvedValue(undefined),
-      dispose: vi.fn().mockResolvedValue(undefined)
+      dispose: vi.fn().mockResolvedValue(undefined),
+      getLastAssistantText: () => '```json\n{\n  "status": "COMPLETED",\n  "testCases": []\n}\n```'
     };
 
     const runner = new PiAgentRunner('/mock/workspace', async (opts) => {
@@ -37,6 +38,7 @@ describe('PiAgentRunner Hexagonal Adapter (Normative §4.1, §35)', () => {
     });
 
     expect(execution.status).toBe('COMPLETED');
+    expect(execution.rawOutput).toContain('testCases');
     expect(mockSession.prompt).toHaveBeenCalledWith('Write test suite');
     expect(capturedToolInterceptor).toBeDefined();
 

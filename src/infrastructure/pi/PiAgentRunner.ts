@@ -28,7 +28,7 @@ export class PiAgentRunner implements AgentRunner {
     private readonly sessionFactory?: PiSessionFactory
   ) {}
 
-  public getInvocation(invocationId: string): AgentInvocation | undefined {
+  public getActiveInvocation(invocationId: string): AgentInvocation | undefined {
     return this.activeInvocations.get(invocationId);
   }
 
@@ -62,7 +62,13 @@ export class PiAgentRunner implements AgentRunner {
 
       if (toolName === 'bash' || toolName === 'exec' || toolName === 'shell') {
         const cmd = (args.command || args.cmd || '') as string;
-        if (cmd.includes('git push') || cmd.includes('git reset --hard') || cmd.includes('git checkout -f')) {
+        if (
+          cmd.includes('git push') ||
+          cmd.includes('git reset --hard') ||
+          cmd.includes('git checkout -f') ||
+          cmd.includes('rm -rf src') ||
+          cmd.includes('rm -rf tests')
+        ) {
           this.emitEvent(invocation.invocationId, {
             invocationId: invocation.invocationId,
             type: 'FAILED',
@@ -93,9 +99,17 @@ export class PiAgentRunner implements AgentRunner {
       });
       this.activeSessions.set(invocation.invocationId, session);
       await session.prompt(invocation.prompt);
-      execution.status = 'COMPLETED';
+
       const lastText = typeof session.getLastAssistantText === 'function' ? session.getLastAssistantText() : '';
-      execution.rawOutput = lastText || accumulatedOutput || `Agent ${invocation.agentId} completed task ${invocation.taskId}`;
+      const finalOutput = lastText || accumulatedOutput;
+
+      if (!finalOutput) {
+        execution.status = 'FAILED';
+        execution.rawOutput = `Agent ${invocation.agentId} completed execution without producing output`;
+      } else {
+        execution.status = 'COMPLETED';
+        execution.rawOutput = finalOutput;
+      }
     } else {
       try {
         const piModule: any = await import('@earendil-works/pi-coding-agent');
@@ -106,7 +120,7 @@ export class PiAgentRunner implements AgentRunner {
           });
           this.activeSessions.set(invocation.invocationId, session);
 
-          // Wire real Pi session event streaming via session.subscribe (§4.1)
+          // Wire verified Pi streaming events (§4.1)
           if (typeof session.subscribe === 'function') {
             session.subscribe((event: any) => {
               if (event.type === 'message_update' && event.assistantMessageEvent?.type === 'text_delta') {
@@ -125,8 +139,15 @@ export class PiAgentRunner implements AgentRunner {
           await session.prompt(invocation.prompt);
 
           const lastText = typeof session.getLastAssistantText === 'function' ? session.getLastAssistantText() : '';
-          execution.status = 'COMPLETED';
-          execution.rawOutput = lastText || accumulatedOutput;
+          const finalOutput = lastText || accumulatedOutput;
+
+          if (!finalOutput) {
+            execution.status = 'FAILED';
+            execution.rawOutput = 'Pi session completed without capturing model output';
+          } else {
+            execution.status = 'COMPLETED';
+            execution.rawOutput = finalOutput;
+          }
         }
       } catch (err: any) {
         execution.status = 'FAILED';

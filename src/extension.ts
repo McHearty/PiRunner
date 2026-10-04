@@ -18,6 +18,7 @@ import { StateRecoveryService } from './domain/project/StateRecovery.js';
 import { StateValidationService } from './domain/project/StateValidation.js';
 import { TestSuiteLock } from './domain/testing/TestSuiteLock.js';
 import { ArtifactIngestionService } from './domain/artifacts/ArtifactIngestion.js';
+import { AgentInvocation } from './domain/agents/AgentRunner.js';
 
 export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   const root = process.cwd();
@@ -42,6 +43,8 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     gitRepo,
     root
   );
+
+  let activeInvocation: AgentInvocation | null = null;
 
   function syncAgentToState(state: WorkflowState): string {
     switch (state) {
@@ -97,7 +100,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     return createHash('sha256').update('no-lockfile-available').digest('hex');
   }
 
-  // Canonical Startup Pipeline (§5, §18) - Error canonicalization to AGENT_FAILED
+  // Canonical Startup Pipeline (§5, §18)
   if (controller.getState() === 'PROJECT_DISCOVERY') {
     if (discovery.entryMode === 'RESUME_WORKFLOW') {
       const recovery = StateRecoveryService.recover(eventStore as any, workflowId);
@@ -124,7 +127,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
           return controller.transition('PROJECT_BASELINE', { actorType: 'SYSTEM', actorId: '0000' });
         })
         .then(() => controller.transition('KNOWLEDGE_SYNC', { actorType: 'SYSTEM', actorId: '0000' }))
-        .then(() => controller.transition('PLANNING', { actorType: 'SYSTEM', actorId: '0000' })) // Complete adoption toward PLANNING (§5.2)
+        .then(() => controller.transition('PLANNING', { actorType: 'SYSTEM', actorId: '0000' }))
         .catch(async (err) => {
           console.error('[PiRunner Adoption Failure]:', err.message);
           await controller.transition('AGENT_FAILED', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { unrecoverable: true, adoptionError: err.message } }).catch(() => {});
@@ -132,20 +135,27 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   }
 
-  let activeAgentId = syncAgentToState(controller.getState());
-
+  // Invocation-Scoped Tool Authorization Hook (§51, §52)
   pi.on('tool_call', async (call) => {
+    const executingAgentId = activeInvocation ? activeInvocation.agentId : syncAgentToState(controller.getState());
+
     if (call.toolName === 'write' || call.toolName === 'edit') {
       const filePath = (call.args.path || call.args.filePath || '') as string;
-      const allowed = PathCapabilityEnforcer.isWriteAllowed(activeAgentId, filePath);
+      const allowed = PathCapabilityEnforcer.isWriteAllowed(executingAgentId, filePath);
       if (!allowed) {
-        throw new Error(`[HITM Boundary Violation]: Agent ${activeAgentId} is forbidden from writing to "${filePath}".`);
+        throw new Error(`[HITM Boundary Violation]: Agent ${executingAgentId} is forbidden from writing to "${filePath}".`);
       }
     }
     if (call.toolName === 'bash' || call.toolName === 'exec' || call.toolName === 'shell') {
       const cmd = (call.args.command || call.args.cmd || '') as string;
-      if (cmd.includes('git push') || cmd.includes('git reset --hard')) {
-        throw new Error(`[HITM Authority Violation]: Agent ${activeAgentId} forbidden from executing remote push / destructive command.`);
+      if (
+        cmd.includes('git push') ||
+        cmd.includes('git reset --hard') ||
+        cmd.includes('git checkout -f') ||
+        cmd.includes('rm -rf src') ||
+        cmd.includes('rm -rf tests')
+      ) {
+        throw new Error(`[HITM Authority Violation]: Agent ${executingAgentId} forbidden from executing '${cmd}'.`);
       }
     }
   });
@@ -154,13 +164,22 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     description: 'Display current HITM state, mode, active agent, and test lock status',
     handler: async (_args: string, ctx: ExtensionContext) => {
       const state = controller.getState();
-      activeAgentId = syncAgentToState(state);
+      const currentAgent = activeInvocation ? activeInvocation.agentId : syncAgentToState(state);
       const lock = TestSuiteLock.loadLock();
       const lockSummary = lock ? `Locked (${lock.testSuiteContentHash.slice(0, 8)})` : 'Unlocked';
       ctx.ui.notify(
-        `State: [${state}] | Mode: ${discovery.entryMode} | Agent: ${activeAgentId} | TestLock: ${lockSummary}`,
+        `State: [${state}] | Mode: ${discovery.entryMode} | Agent: ${currentAgent} | TestLock: ${lockSummary}`,
         'info'
       );
+    }
+  });
+
+  pi.registerCommand('hitm-prompt', {
+    description: 'View layered governance sub-prompt for the active agent',
+    handler: async (_args: string, ctx: ExtensionContext) => {
+      const currentAgent = activeInvocation ? activeInvocation.agentId : syncAgentToState(controller.getState());
+      const prompt = AgentPromptFactory.createAgentSystemPrompt(currentAgent);
+      ctx.ui.notify(`Active Sub-Prompt Loaded for Agent ${currentAgent} (${prompt.length} chars)`, 'info');
     }
   });
 
@@ -179,8 +198,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
       if (confirmed) {
         try {
           await controller.transition(target, { actorType: 'HUMAN', actorId: 'lead-human' }, { humanApproved: true });
-          activeAgentId = syncAgentToState(controller.getState());
-          ctx.ui.notify(`State advanced to ${controller.getState()}. Active Agent: ${activeAgentId}`, 'info');
+          ctx.ui.notify(`State advanced to ${controller.getState()}`, 'info');
         } catch (err: any) {
           ctx.ui.notify(`Transition rejected: ${err.message}`, 'error');
         }
@@ -225,11 +243,12 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   });
 
-  // Closed-Loop: Agent execution -> Artifact Ingestion -> Schema Validation -> State Transition (§1, §12, §61)
+  // Closed-Loop: Invocation-Scoped Dispatch -> Artifact Extraction -> Transition (§1, §12, §52, §61)
   pi.registerCommand('hitm-run', {
     description: 'Dispatch active agent, ingest typed artifact, validate schema, and advance workflow',
     handler: async (taskPrompt: string, ctx: ExtensionContext) => {
       const currentState = controller.getState();
+      const executingAgentId = syncAgentToState(currentState);
       const expectedType = getExpectedArtifactForState(currentState);
       const promptText = taskPrompt.trim() || `Execute duties for state [${currentState}]. Output must include valid JSON for ${expectedType}.`;
 
@@ -244,17 +263,20 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
       if (testSpec) contextArtifactIds.push(testSpec.artifactId);
       if (knowledge) contextArtifactIds.push(knowledge.artifactId);
 
-      ctx.ui.notify(`Invoking Agent ${activeAgentId} in [${currentState}]...`, 'info');
+      // Establish Invocation-Scoped Authority (§52)
+      activeInvocation = {
+        invocationId: `inv-${Date.now()}`,
+        agentId: executingAgentId,
+        workflowId,
+        taskId: `task-${currentState}`,
+        prompt: promptText,
+        contextArtifactIds
+      };
+
+      ctx.ui.notify(`Invoking Agent ${executingAgentId} in [${currentState}]...`, 'info');
 
       try {
-        const execution = await agentRunner.start({
-          invocationId: `inv-${Date.now()}`,
-          agentId: activeAgentId,
-          workflowId,
-          taskId: `task-${currentState}`,
-          prompt: promptText,
-          contextArtifactIds
-        });
+        const execution = await agentRunner.start(activeInvocation);
 
         if (execution.status === 'FAILED') {
           ctx.ui.notify(`Agent execution failed: ${execution.rawOutput}`, 'error');
@@ -268,7 +290,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
             expectedType,
             workflowId,
             `task-${currentState}`,
-            activeAgentId,
+            executingAgentId,
             validator,
             artifactStore as any
           );
@@ -281,12 +303,10 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
 
           ctx.ui.notify(`Validated and persisted ${expectedType} [${ingestion.artifact?.artifactId}]`, 'info');
 
-          // Closed Loop: Automatically advance workflow through the transition unlocked by this artifact (§1, §11)
           const targetTransition = getTargetTransitionForArtifact(currentState, expectedType);
           if (targetTransition) {
             try {
-              await controller.transition(targetTransition, { actorType: 'AGENT', actorId: activeAgentId }, { artifactIds: [ingestion.artifact!.artifactId] });
-              activeAgentId = syncAgentToState(controller.getState());
+              await controller.transition(targetTransition, { actorType: 'AGENT', actorId: executingAgentId }, { artifactIds: [ingestion.artifact!.artifactId] });
               ctx.ui.notify(`Workflow advanced automatically to [${controller.getState()}]`, 'info');
             } catch (transitionErr: any) {
               ctx.ui.notify(`Transition guard failed: ${transitionErr.message}`, 'warning');
@@ -294,9 +314,11 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
           }
         }
 
-        ctx.ui.notify(`Agent ${activeAgentId} loop completed successfully.`, 'info');
+        ctx.ui.notify(`Agent ${executingAgentId} loop completed successfully.`, 'info');
       } catch (err: any) {
         ctx.ui.notify(`Agent run exception: ${err.message}`, 'error');
+      } finally {
+        activeInvocation = null; // Release invocation authority
       }
     }
   });
