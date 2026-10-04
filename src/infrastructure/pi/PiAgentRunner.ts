@@ -35,8 +35,8 @@ export class PiAgentRunner implements AgentRunner {
     this.executionStates.set(invocation.invocationId, execution);
     this.eventQueues.set(invocation.invocationId, []);
 
-    // 1. Tool-level capability interceptor
     const toolInterceptor = async (toolName: string, args: Record<string, unknown>): Promise<boolean> => {
+      // 1. File write/edit protection
       if (toolName === 'write' || toolName === 'edit') {
         const filePath = (args.path || args.filePath || '') as string;
         if (!PathCapabilityEnforcer.isWriteAllowed(invocation.agentId, filePath)) {
@@ -46,13 +46,27 @@ export class PiAgentRunner implements AgentRunner {
             payload: { error: `Path capability violation: Agent ${invocation.agentId} cannot write to ${filePath}` },
             timestamp: new Date().toISOString()
           });
-          return false; // Reject tool execution
+          return false;
         }
       }
-      return true; // Allow permitted tool
+
+      // 2. Command/Shell execution capability protection (§51)
+      if (toolName === 'bash' || toolName === 'exec' || toolName === 'shell') {
+        const cmd = (args.command || args.cmd || '') as string;
+        if (cmd.includes('git push')) {
+          this.emitEvent(invocation.invocationId, {
+            invocationId: invocation.invocationId,
+            type: 'FAILED',
+            payload: { error: `Command violation: Agent ${invocation.agentId} is strictly forbidden from executing remote push` },
+            timestamp: new Date().toISOString()
+          });
+          return false;
+        }
+      }
+
+      return true;
     };
 
-    // 2. Initialize session via injected factory or dynamic @earendil-works/pi-coding-agent
     if (this.sessionFactory) {
       const session = await this.sessionFactory({
         cwd: this.workspaceRoot,
@@ -69,8 +83,9 @@ export class PiAgentRunner implements AgentRunner {
       });
       this.activeSessions.set(invocation.invocationId, session);
       await session.prompt(invocation.prompt);
+      execution.status = 'COMPLETED';
+      execution.rawOutput = `Agent ${invocation.agentId} completed task ${invocation.taskId}`;
     } else {
-      // Dynamic import to keep domain decoupled from optional Pi SDK dependency
       try {
         const piModule: any = await import('@earendil-works/pi-coding-agent');
         if (typeof piModule.createAgentSession === 'function') {
@@ -80,20 +95,21 @@ export class PiAgentRunner implements AgentRunner {
           });
           this.activeSessions.set(invocation.invocationId, session);
           await session.prompt(invocation.prompt);
+          execution.status = 'COMPLETED';
         }
       } catch (err: any) {
-        // Fallback execution when native Pi CLI is not linked in development
+        // EPISTEMIC HONESTY: Mark FAILED on runtime absence, never fabricate success (§2)
+        execution.status = 'FAILED';
+        execution.rawOutput = `Pi agent runtime unavailable: ${err.message}`;
         this.emitEvent(invocation.invocationId, {
           invocationId: invocation.invocationId,
-          type: 'COMPLETED',
-          payload: { message: `Simulated Pi execution for agent ${invocation.agentId}` },
+          type: 'FAILED',
+          payload: { error: execution.rawOutput },
           timestamp: new Date().toISOString()
         });
       }
     }
 
-    execution.status = 'COMPLETED';
-    execution.rawOutput = `Agent ${invocation.agentId} completed task ${invocation.taskId}`;
     return execution;
   }
 

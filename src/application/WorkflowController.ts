@@ -9,6 +9,7 @@ import { TestRunner, TestExecutionRequest, TestExecutionResultData } from '../do
 import { AgentRunner } from '../domain/agents/AgentRunner.js';
 import { PathCapabilityEnforcer } from '../domain/repository/PathCapability.js';
 import { GuardContext, RepositorySnapshot, GUARDS } from '../domain/workflow/Guards.js';
+import { RepositoryPort } from '../domain/repository/RepositoryPort.js';
 import { GitRepository } from '../infrastructure/git/GitRepository.js';
 import { TestSuiteLock } from '../domain/testing/TestSuiteLock.js';
 
@@ -23,7 +24,7 @@ export class WorkflowController {
   private currentState: WorkflowState;
   private readonly workflowId: string;
   private readonly config: WorkflowConfig;
-  private readonly gitRepo: GitRepository;
+  private readonly repository: RepositoryPort;
   private repositorySnapshot?: RepositorySnapshot;
 
   constructor(
@@ -34,12 +35,12 @@ export class WorkflowController {
     private readonly agentRunner: AgentRunner,
     config: Partial<WorkflowConfig> = {},
     initialState: WorkflowState = 'PROJECT_DISCOVERY',
+    repository?: RepositoryPort,
     workspaceRoot: string = process.cwd()
   ) {
     this.workflowId = workflowId;
     this.config = { ...DEFAULT_WORKFLOW_CONFIG, ...config };
-    this.gitRepo = new GitRepository(workspaceRoot);
-    // Explicit single entry point: Controller starts strictly at initialState (§5, §18)
+    this.repository = repository || new GitRepository(workspaceRoot);
     this.currentState = initialState;
   }
 
@@ -77,9 +78,10 @@ export class WorkflowController {
       throw new Error(`Transition ${transitionDef.id} (${this.currentState} -> ${targetState}) mandates explicit human approval`);
     }
 
-    const freshRepoSnapshot = this.gitRepo.getFreshSnapshot();
+    const freshRepoSnapshot = this.repository.getFreshSnapshot();
     const effectiveRepo = this.repositorySnapshot || freshRepoSnapshot;
 
+    // Build GuardContext merging humanApproved into metadata for guard evaluation
     const guardContext: GuardContext = {
       currentState: this.currentState,
       targetState,
@@ -92,7 +94,10 @@ export class WorkflowController {
       config: this.config,
       repository: effectiveRepo,
       referencedArtifactIds: options.artifactIds,
-      metadata: options.metadata
+      metadata: {
+        ...options.metadata,
+        humanApproved: options.humanApproved === true
+      }
     };
 
     // FAIL CLOSED: Evaluate all guards; throw if guard or evaluator is missing (§21, §22)
@@ -140,7 +145,7 @@ export class WorkflowController {
       metadata: options.metadata || {}
     };
 
-    // Transactional append: write durable journal FIRST, update memory ONLY on success (§15)
+    // TRANSACTIONAL COMMIT BOUNDARY: append to journal FIRST; advance memory ONLY on success
     this.eventStore.append(event);
     this.currentState = applyWorkflowEvent(this.currentState, event);
 

@@ -30,8 +30,10 @@ export class FileEventStore {
     if (event.sequence !== expectedSeq) {
       throw new SequenceOrderError(expectedSeq, event.sequence);
     }
-    this.events.push(Object.freeze({ ...event }));
+
+    // TRANSACTIONAL COMMIT BOUNDARY: Persist to disk FIRST before updating in-memory state
     appendFileSync(this.filePath, JSON.stringify(event) + '\n', 'utf8');
+    this.events.push(Object.freeze({ ...event }));
   }
 
   public getEvents(workflowId?: string): readonly WorkflowEvent[] {

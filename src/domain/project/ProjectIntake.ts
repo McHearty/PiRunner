@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { StoredArtifact } from '../artifacts/ArtifactStore.js';
 import { RepositorySnapshot } from '../workflow/Guards.js';
-import { GitRepository } from '../../infrastructure/git/GitRepository.js';
+import { RepositoryPort } from '../repository/RepositoryPort.js';
 
 export interface ProjectBaselinePayload {
   repositoryIdentity: string;
@@ -29,10 +29,31 @@ export class ProjectIntakeService {
   public static createBaselineArtifact(
     workflowId: string,
     snapshot: RepositorySnapshot,
+    repository: RepositoryPort,
     workspaceRoot: string = process.cwd()
   ): StoredArtifact<ProjectBaselinePayload> {
-    const gitRepo = new GitRepository(workspaceRoot);
-    const uncommittedChanges = gitRepo.getUncommittedFiles();
+    const uncommittedChanges = repository.getUncommittedFiles();
+
+    // Dynamically detect project type & build system (§7)
+    let projectType = 'unknown';
+    let buildSystem: string | null = null;
+    let repositoryIdentity = 'unknown-repo';
+
+    const pkgPath = join(workspaceRoot, 'package.json');
+    if (existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+        repositoryIdentity = pkg.name || 'unnamed-project';
+        projectType = existsSync(join(workspaceRoot, 'tsconfig.json')) ? 'typescript' : 'javascript';
+        buildSystem = 'npm';
+      } catch {}
+    } else if (existsSync(join(workspaceRoot, 'Cargo.toml'))) {
+      projectType = 'rust';
+      buildSystem = 'cargo';
+    } else if (existsSync(join(workspaceRoot, 'pyproject.toml')) || existsSync(join(workspaceRoot, 'requirements.txt'))) {
+      projectType = 'python';
+      buildSystem = 'pip';
+    }
 
     let dependencyLockHash: string | null = null;
     const lockPath = join(workspaceRoot, 'package-lock.json');
@@ -40,24 +61,46 @@ export class ProjectIntakeService {
       dependencyLockHash = createHash('sha256').update(readFileSync(lockPath)).digest('hex');
     }
 
+    // Dynamic discovery of specifications, tests, docs, and CI
+    const specificationRefs: any[] = [];
+    if (existsSync(join(workspaceRoot, 'TECHSPEC.md'))) specificationRefs.push({ type: 'DOCUMENTATION', identifier: 'TECHSPEC.md' });
+    if (existsSync(join(workspaceRoot, 'SPEC.md'))) specificationRefs.push({ type: 'DOCUMENTATION', identifier: 'SPEC.md' });
+
+    const testRefs: any[] = [];
+    if (existsSync(join(workspaceRoot, 'tests'))) testRefs.push({ type: 'FILE', identifier: 'tests' });
+    else if (existsSync(join(workspaceRoot, 'test'))) testRefs.push({ type: 'FILE', identifier: 'test' });
+
+    const documentationRefs: any[] = [];
+    if (existsSync(join(workspaceRoot, 'README.md'))) documentationRefs.push({ type: 'FILE', identifier: 'README.md' });
+
+    const existingCiConfiguration: any[] = [];
+    const ghWorkflows = join(workspaceRoot, '.github', 'workflows');
+    if (existsSync(ghWorkflows)) {
+      try {
+        for (const file of readdirSync(ghWorkflows)) {
+          existingCiConfiguration.push({ type: 'FILE', identifier: `.github/workflows/${file}` });
+        }
+      } catch {}
+    }
+
     const snapshotHash = createHash('sha256')
       .update(`${snapshot.branch}:${snapshot.headSha}:${snapshot.isClean}`)
       .digest('hex');
 
     const payload: ProjectBaselinePayload = {
-      repositoryIdentity: 'McHearty/PiRunner',
+      repositoryIdentity,
       baseRevision: snapshot.headSha,
       branch: snapshot.branch,
       workingTreeState: snapshot.isClean ? 'CLEAN' : 'DIRTY',
-      projectType: 'typescript',
-      buildSystem: 'npm',
-      specificationRefs: [{ type: 'DOCUMENTATION', identifier: 'TECHSPEC.md' }],
-      testRefs: [{ type: 'FILE', identifier: 'tests' }],
-      documentationRefs: [{ type: 'FILE', identifier: 'README.md' }],
+      projectType,
+      buildSystem,
+      specificationRefs,
+      testRefs,
+      documentationRefs,
       dependencyLockHash,
-      sourceInventory: [{ type: 'FILE', identifier: 'src' }],
-      testInventory: [{ type: 'FILE', identifier: 'tests' }],
-      existingCiConfiguration: [],
+      sourceInventory: existsSync(join(workspaceRoot, 'src')) ? [{ type: 'FILE', identifier: 'src' }] : [],
+      testInventory: testRefs,
+      existingCiConfiguration,
       detectedUncommittedChanges: uncommittedChanges,
       unresolvedProjectQuestions: [],
       intakeTimestamp: new Date().toISOString(),

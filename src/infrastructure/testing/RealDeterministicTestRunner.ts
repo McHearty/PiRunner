@@ -3,39 +3,46 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { TestRunner, TestExecutionRequest, TestExecutionResultData, IndividualTestRecord } from '../../domain/testing/TestRunner.js';
 import { TestSuiteHasher, TestFileEntry } from '../../domain/testing/TestSuiteHasher.js';
+import { ArtifactStore } from '../../domain/artifacts/ArtifactStore.js';
 
 export class RealDeterministicTestRunner implements TestRunner {
-  constructor(private readonly workspaceRoot: string = process.cwd()) {}
+  constructor(
+    private readonly workspaceRoot: string = process.cwd(),
+    private readonly artifactStore?: ArtifactStore
+  ) {}
 
   public async execute(request: TestExecutionRequest): Promise<TestExecutionResultData> {
-    // 1. Gather all test files in workspace
-    const testFiles = this.gatherTestFiles();
+    // 1. Resolve testRootPaths strictly from accepted TestSpecification (§28, §31)
+    const testRoots = this.resolveAuthoritativeTestRoots(request.testSpecificationArtifactId);
 
-    // 2. Compute canonical content hash of the active test suite
+    // 2. Gather authoritative test files from declared roots only
+    const testFiles = this.gatherAuthoritativeTestFiles(testRoots);
+
+    // 3. Compute canonical content hash of the authoritative test suite
     const liveSuiteHash = TestSuiteHasher.hash({
       testFramework: 'vitest',
       executionCommand: request.executionCommand,
       files: testFiles
     });
 
-    // 3. Verify suite content hash against accepted specification (§17)
+    // 4. Verify suite content hash against accepted specification (§17, §31)
     if (request.testSuiteContentHash && liveSuiteHash !== request.testSuiteContentHash) {
       throw new Error(
-        `Authoritative test suite hash mismatch! Expected ${request.testSuiteContentHash}, calculated live hash: ${liveSuiteHash}`
+        `Authoritative test suite hash mismatch! Expected [${request.testSuiteContentHash}], calculated live hash [${liveSuiteHash}]`
       );
     }
 
-    // 4. Execute deterministic command in workspace subprocess
+    // 5. Execute command in subprocess
     const startMs = Date.now();
     const { stdout, stderr, exitCode } = await this.runCommand(request.executionCommand);
     const durationMs = Date.now() - startMs;
     const rawOutput = `${stdout}\n${stderr}`.trim();
 
-    // 5. Parse test execution results deterministically
+    // 6. Record deterministic execution result
     const isPassed = exitCode === 0;
     const executedTests: IndividualTestRecord[] = [
       {
-        testId: 'suite-execution',
+        testId: 'authoritative-suite-run',
         status: isPassed ? 'PASSED' : 'FAILED',
         durationMs,
         failureOutput: isPassed ? undefined : stderr || stdout
@@ -59,26 +66,39 @@ export class RealDeterministicTestRunner implements TestRunner {
     };
   }
 
-  private gatherTestFiles(): TestFileEntry[] {
-    const testsDir = join(this.workspaceRoot, 'tests');
-    if (!existsSync(testsDir)) return [];
-
-    const entries: TestFileEntry[] = [];
-    const walk = (dir: string) => {
-      for (const item of readdirSync(dir)) {
-        const full = join(dir, item);
-        const stat = statSync(full);
-        if (stat.isDirectory()) {
-          walk(full);
-        } else if (stat.isFile() && (item.endsWith('.test.ts') || item.endsWith('.spec.ts'))) {
-          entries.push({
-            relativePath: relative(this.workspaceRoot, full).replace(/\\/g, '/'),
-            content: readFileSync(full, 'utf8')
-          });
-        }
+  private resolveAuthoritativeTestRoots(specArtifactId: string): string[] {
+    if (this.artifactStore) {
+      const spec = this.artifactStore.get(specArtifactId);
+      const roots = (spec?.payload as any)?.testRootPaths;
+      if (Array.isArray(roots) && roots.length > 0) {
+        return roots;
       }
-    };
-    walk(testsDir);
+    }
+    return ['tests'];
+  }
+
+  private gatherAuthoritativeTestFiles(roots: string[]): TestFileEntry[] {
+    const entries: TestFileEntry[] = [];
+    for (const root of roots) {
+      const absRoot = join(this.workspaceRoot, root);
+      if (!existsSync(absRoot)) continue;
+
+      const walk = (dir: string) => {
+        for (const item of readdirSync(dir)) {
+          const full = join(dir, item);
+          const stat = statSync(full);
+          if (stat.isDirectory()) {
+            walk(full);
+          } else if (stat.isFile() && (item.endsWith('.test.ts') || item.endsWith('.spec.ts'))) {
+            entries.push({
+              relativePath: relative(this.workspaceRoot, full).replace(/\\/g, '/'),
+              content: readFileSync(full, 'utf8')
+            });
+          }
+        }
+      };
+      walk(absRoot);
+    }
     return entries;
   }
 

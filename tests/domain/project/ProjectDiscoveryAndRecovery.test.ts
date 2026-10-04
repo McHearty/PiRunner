@@ -5,6 +5,7 @@ import { ArtifactValidator } from '../../../src/domain/artifacts/ArtifactValidat
 import { EventStore } from '../../../src/domain/events/EventStore.js';
 import { FakeTestRunner } from '../../../src/infrastructure/testing/FakeTestRunner.js';
 import { FakeAgentRunner } from '../../../src/infrastructure/agents/FakeAgentRunner.js';
+import { GitRepository } from '../../../src/infrastructure/git/GitRepository.js';
 import { ProjectDiscoveryService } from '../../../src/domain/project/ProjectDiscovery.js';
 import { ProjectIntakeService } from '../../../src/domain/project/ProjectIntake.js';
 import { StateRecoveryService } from '../../../src/domain/project/StateRecovery.js';
@@ -14,11 +15,13 @@ describe('Project Discovery, Adoption, and Canonical Resumption (Normative ยง5โ€
   let validator: ArtifactValidator;
   let artifactStore: ArtifactStore;
   let eventStore: EventStore;
+  let gitRepo: GitRepository;
 
   beforeEach(() => {
     validator = new ArtifactValidator();
     artifactStore = new ArtifactStore(validator);
     eventStore = new EventStore();
+    gitRepo = new GitRepository(process.cwd());
   });
 
   it('classifies existing Git repo as ADOPT_EXISTING_PROJECT or RESUME_WORKFLOW', () => {
@@ -30,7 +33,7 @@ describe('Project Discovery, Adoption, and Canonical Resumption (Normative ยง5โ€
 
   it('creates and validates a normative ProjectBaseline artifact during intake (ยง8, ยง44)', () => {
     const snapshot = ProjectDiscoveryService.captureRepositorySnapshot(process.cwd());
-    const baseline = ProjectIntakeService.createBaselineArtifact('wf-adoption-test', snapshot, process.cwd());
+    const baseline = ProjectIntakeService.createBaselineArtifact('wf-adoption-test', snapshot, gitRepo, process.cwd());
 
     expect(baseline.artifactType).toBe('ProjectBaseline');
     expect(baseline.status).toBe('ACCEPTED');
@@ -49,7 +52,8 @@ describe('Project Discovery, Adoption, and Canonical Resumption (Normative ยง5โ€
       new FakeTestRunner(),
       new FakeAgentRunner(),
       {},
-      'PROJECT_DISCOVERY'
+      'PROJECT_DISCOVERY',
+      gitRepo
     );
     expect(controller.getState()).toBe('PROJECT_DISCOVERY');
 
@@ -57,7 +61,7 @@ describe('Project Discovery, Adoption, and Canonical Resumption (Normative ยง5โ€
     expect(controller.getState()).toBe('PROJECT_INTAKE');
 
     const snapshot = ProjectDiscoveryService.captureRepositorySnapshot(process.cwd());
-    const baseline = ProjectIntakeService.createBaselineArtifact('wf-adopt-flow', snapshot, process.cwd());
+    const baseline = ProjectIntakeService.createBaselineArtifact('wf-adopt-flow', snapshot, gitRepo, process.cwd());
     artifactStore.save(baseline);
 
     await controller.transition('PROJECT_BASELINE', { actorType: 'SYSTEM', actorId: '0000' });
@@ -76,7 +80,8 @@ describe('Project Discovery, Adoption, and Canonical Resumption (Normative ยง5โ€
       new FakeTestRunner(),
       new FakeAgentRunner(),
       {},
-      'PROJECT_DISCOVERY'
+      'PROJECT_DISCOVERY',
+      gitRepo
     );
 
     await controller1.transition('CONCEPT', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'NEW_PROJECT' } });
@@ -90,7 +95,8 @@ describe('Project Discovery, Adoption, and Canonical Resumption (Normative ยง5โ€
       new FakeTestRunner(),
       new FakeAgentRunner(),
       {},
-      'PROJECT_DISCOVERY'
+      'PROJECT_DISCOVERY',
+      gitRepo
     );
     expect(controller2.getState()).toBe('PROJECT_DISCOVERY');
 
@@ -118,14 +124,15 @@ describe('Project Discovery, Adoption, and Canonical Resumption (Normative ยง5โ€
       new FakeTestRunner(),
       new FakeAgentRunner(),
       {},
-      'PROJECT_DISCOVERY'
+      'PROJECT_DISCOVERY',
+      gitRepo
     );
 
     // Initial event
     await controller.transition('CONCEPT', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'NEW_PROJECT' } });
 
     // New session enters recovery
-    const controller2 = new WorkflowController('wf-conflict-test', artifactStore, eventStore, new FakeTestRunner(), new FakeAgentRunner());
+    const controller2 = new WorkflowController('wf-conflict-test', artifactStore, eventStore, new FakeTestRunner(), new FakeAgentRunner(), {}, 'PROJECT_DISCOVERY', gitRepo);
     await controller2.transition('STATE_RECOVERY', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'RESUME_WORKFLOW' } });
     await controller2.transition('STATE_VALIDATION', { actorType: 'SYSTEM', actorId: '0000' });
 

@@ -17,13 +17,14 @@ import { ProjectIntakeService } from './domain/project/ProjectIntake.js';
 import { StateRecoveryService } from './domain/project/StateRecovery.js';
 import { StateValidationService } from './domain/project/StateValidation.js';
 import { TestSuiteLock } from './domain/testing/TestSuiteLock.js';
+import { ArtifactIngestionService } from './domain/artifacts/ArtifactIngestion.js';
 
 export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   const root = process.cwd();
   const validator = new ArtifactValidator();
   const artifactStore = new FileArtifactStore(validator);
   const eventStore = new FileEventStore();
-  const testRunner = new RealDeterministicTestRunner(root);
+  const testRunner = new RealDeterministicTestRunner(root, artifactStore as any);
   const agentRunner = new PiAgentRunner(root);
   const gitRepo = new GitRepository(root);
 
@@ -38,6 +39,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     agentRunner,
     {},
     'PROJECT_DISCOVERY',
+    gitRepo,
     root
   );
 
@@ -62,6 +64,22 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   }
 
+  function getExpectedArtifactForState(state: WorkflowState): string | null {
+    switch (state) {
+      case 'CONCEPT': return 'ConceptPackage';
+      case 'SPECIFICATION': return 'MasterSpecification';
+      case 'PLANNING': return 'SprintSpecification';
+      case 'KNOWLEDGE_SYNC': return 'KnowledgeSnapshot';
+      case 'TEST_AUTHORING': return 'TestSpecification';
+      case 'IMPLEMENTATION': return 'ImplementationResult';
+      case 'TRIAGE': return 'TriageReport';
+      case 'REVIEW': return 'ReviewResult';
+      case 'DIARY': return 'DailyDevlog';
+      case 'PUBLICATION_READY': return 'PublicationPackage';
+      default: return null;
+    }
+  }
+
   function getRealDependencyLockHash(): string {
     const lockPath = join(root, 'package-lock.json');
     if (existsSync(lockPath)) {
@@ -70,7 +88,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     return createHash('sha256').update('no-lockfile-available').digest('hex');
   }
 
-  // Canonical Startup Pipeline (§5, §18)
+  // Canonical Startup Pipeline (§5, §18) with error propagation
   if (controller.getState() === 'PROJECT_DISCOVERY') {
     if (discovery.entryMode === 'RESUME_WORKFLOW') {
       const recovery = StateRecoveryService.recover(eventStore as any, workflowId);
@@ -85,34 +103,45 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
             return controller.transition('REPOSITORY_CONFLICT', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MISMATCH' } });
           }
         })
-        .catch(() => {});
+        .catch((err) => {
+          console.error('[PiRunner Startup Error]:', err.message);
+        });
     } else if (discovery.entryMode === 'ADOPT_EXISTING_PROJECT') {
       controller.transition('PROJECT_INTAKE', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' } })
         .then(() => {
-          const baseline = ProjectIntakeService.createBaselineArtifact(workflowId, discovery.repositorySnapshot, root);
+          const baseline = ProjectIntakeService.createBaselineArtifact(workflowId, discovery.repositorySnapshot, gitRepo, root);
           artifactStore.save(baseline);
           return controller.transition('PROJECT_BASELINE', { actorType: 'SYSTEM', actorId: '0000' });
         })
-        .catch(() => {});
+        .then(() => controller.transition('KNOWLEDGE_SYNC', { actorType: 'SYSTEM', actorId: '0000' }))
+        .catch((err) => {
+          console.error('[PiRunner Adoption Error]:', err.message);
+        });
     }
   }
 
   let activeAgentId = syncAgentToState(controller.getState());
 
-  // 1. Tool-level capability boundary hook
+  // Comprehensive Tool-level capability boundary hook (File + Shell + Git)
   pi.on('tool_call', async (call) => {
+    // 1. Path write enforcement
     if (call.toolName === 'write' || call.toolName === 'edit') {
       const filePath = (call.args.path || call.args.filePath || '') as string;
       const allowed = PathCapabilityEnforcer.isWriteAllowed(activeAgentId, filePath);
       if (!allowed) {
-        throw new Error(
-          `[HITM Boundary Violation]: Agent ${activeAgentId} is forbidden from writing to "${filePath}".`
-        );
+        throw new Error(`[HITM Boundary Violation]: Agent ${activeAgentId} is forbidden from writing to "${filePath}".`);
+      }
+    }
+
+    // 2. Command / Git execution enforcement (§51)
+    if (call.toolName === 'bash' || call.toolName === 'exec' || call.toolName === 'shell') {
+      const cmd = (call.args.command || call.args.cmd || '') as string;
+      if (cmd.includes('git push')) {
+        throw new Error(`[HITM Authority Violation]: Agent ${activeAgentId} is strictly forbidden from executing remote push.`);
       }
     }
   });
 
-  // 2. Command: /hitm-status
   pi.registerCommand('hitm-status', {
     description: 'Display current HITM state, mode, active agent, and test lock status',
     handler: async (_args: string, ctx: ExtensionContext) => {
@@ -127,7 +156,6 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   });
 
-  // 3. Command: /hitm-prompt
   pi.registerCommand('hitm-prompt', {
     description: 'View layered governance sub-prompt for the active agent',
     handler: async (_args: string, ctx: ExtensionContext) => {
@@ -136,7 +164,6 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   });
 
-  // 4. Command: /hitm-approve
   pi.registerCommand('hitm-approve', {
     description: 'Authorize and execute next state transition as Human Authority',
     handler: async (targetState: string, ctx: ExtensionContext) => {
@@ -161,7 +188,6 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   });
 
-  // 5. Command: /hitm-test (Consumes Real Dependency Lock and Accepted TestSpecification)
   pi.registerCommand('hitm-test', {
     description: 'Trigger authoritative TestRunner consuming accepted TestSpecification and real lockfile',
     handler: async (_args: string, ctx: ExtensionContext) => {
@@ -199,13 +225,14 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   });
 
-  // 6. Command: /hitm-run (Closed-Loop Agent Invocation with Context Artifacts)
+  // Closed-Loop Agent Invocation + Typed Artifact Ingestion (§1, §12, §61)
   pi.registerCommand('hitm-run', {
-    description: 'Dispatch the active agent through PiAgentRunner with layered governance prompt and context artifacts',
+    description: 'Dispatch active agent, ingest typed artifact, validate via schema, and advance workflow',
     handler: async (taskPrompt: string, ctx: ExtensionContext) => {
-      const promptText = taskPrompt.trim() || `Perform bounded duty for state [${controller.getState()}]`;
-      
-      // Bind relevant context artifacts to agent invocation (§61)
+      const currentState = controller.getState();
+      const expectedType = getExpectedArtifactForState(currentState);
+      const promptText = taskPrompt.trim() || `Execute duties for state [${currentState}]. Output must include valid JSON for ${expectedType}.`;
+
       const contextArtifactIds: string[] = [];
       const masterSpec = artifactStore.getLatestAccepted('MasterSpecification');
       const sprintSpec = artifactStore.getLatestAccepted('SprintSpecification');
@@ -217,21 +244,47 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
       if (testSpec) contextArtifactIds.push(testSpec.artifactId);
       if (knowledge) contextArtifactIds.push(knowledge.artifactId);
 
-      ctx.ui.notify(`Invoking Agent ${activeAgentId} in role [${syncAgentToState(controller.getState())}] with ${contextArtifactIds.length} context artifact(s)...`, 'info');
+      ctx.ui.notify(`Invoking Agent ${activeAgentId} in [${currentState}]...`, 'info');
 
       try {
         const execution = await agentRunner.start({
           invocationId: `inv-${Date.now()}`,
           agentId: activeAgentId,
           workflowId,
-          taskId: `task-${controller.getState()}`,
+          taskId: `task-${currentState}`,
           prompt: promptText,
           contextArtifactIds
         });
 
-        ctx.ui.notify(`Agent ${activeAgentId} execution completed: ${execution.status}`, 'info');
+        if (execution.status === 'FAILED') {
+          ctx.ui.notify(`Agent execution failed: ${execution.rawOutput}`, 'error');
+          return;
+        }
+
+        // Ingest typed artifact from execution output if state expects one
+        if (expectedType) {
+          const ingestion = ArtifactIngestionService.ingestFromExecution(
+            execution,
+            expectedType,
+            workflowId,
+            `task-${currentState}`,
+            activeAgentId,
+            validator,
+            artifactStore as any
+          );
+
+          if (!ingestion.success) {
+            ctx.ui.notify(`Artifact ingestion failed: ${ingestion.errors.join(', ')}`, 'error');
+            await controller.transition('ARTIFACT_INVALID', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationFailed: true } });
+            return;
+          }
+
+          ctx.ui.notify(`Validated and persisted ${expectedType} [${ingestion.artifact?.artifactId}]`, 'info');
+        }
+
+        ctx.ui.notify(`Agent ${activeAgentId} run completed successfully.`, 'info');
       } catch (err: any) {
-        ctx.ui.notify(`Agent execution failed: ${err.message}`, 'error');
+        ctx.ui.notify(`Agent run exception: ${err.message}`, 'error');
       }
     }
   });
