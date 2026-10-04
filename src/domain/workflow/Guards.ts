@@ -3,6 +3,7 @@ import { WorkflowEvent } from './WorkflowEvent.js';
 import { WorkflowConfig } from './WorkflowConfig.js';
 import { StoredArtifact } from '../artifacts/ArtifactStore.js';
 import { TestSuiteLock } from '../testing/TestSuiteLock.js';
+import { PathCapabilityEnforcer } from '../repository/PathCapability.js';
 
 export interface RepositorySnapshot {
   branch: string;
@@ -53,7 +54,6 @@ export const GUARDS: Record<string, GuardDefinition> = {
     id: 'G-PROJECT-002',
     description: 'No existing implementation requires adoption',
     evaluate: (ctx) => {
-      // Must not have existing non-empty commit history if initialized as fresh new project
       if (ctx.metadata?.entryMode === 'NEW_PROJECT') {
         const hasHistory = ctx.repository && ctx.repository.headSha !== '0000000000000000000000000000000000000000';
         return hasHistory && ctx.metadata?.forceNew !== true
@@ -218,8 +218,11 @@ export const GUARDS: Record<string, GuardDefinition> = {
   },
   'G-STATE-010': {
     id: 'G-STATE-010',
-    description: 'Capability policy matches',
-    evaluate: () => pass()
+    description: 'Capability policy matches normative boundaries',
+    evaluate: () => {
+      const integrity = PathCapabilityEnforcer.validatePolicyIntegrity();
+      return integrity.valid ? pass() : fail(`Capability policy violation: ${integrity.errors.join(', ')}`);
+    }
   },
   'G-STATE-011': {
     id: 'G-STATE-011',

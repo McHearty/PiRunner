@@ -12,13 +12,13 @@ export class RealDeterministicTestRunner implements TestRunner {
   ) {}
 
   public async execute(request: TestExecutionRequest): Promise<TestExecutionResultData> {
-    // 1. Resolve testRootPaths strictly from accepted TestSpecification (§28, §31) - NO SILENT FALLBACK
+    // 1. Resolve testRootPaths strictly from accepted TestSpecification (§28, §31) - FAIL CLOSED ON MISSING SPEC
     const testRoots = this.resolveAuthoritativeTestRoots(request.testSpecificationArtifactId);
 
     // 2. Gather authoritative test files from declared roots only
     const testFiles = this.gatherAuthoritativeTestFiles(testRoots);
     if (testFiles.length === 0) {
-      throw new Error(`Authoritative test suite contains zero executable test files in roots: [${testRoots.join(', ')}]`);
+      throw new Error(`Authoritative test suite contains zero test files in declared roots: [${testRoots.join(', ')}]`);
     }
 
     // 3. Compute canonical content hash of the authoritative test suite
@@ -69,15 +69,18 @@ export class RealDeterministicTestRunner implements TestRunner {
   }
 
   private resolveAuthoritativeTestRoots(specArtifactId: string): string[] {
-    if (this.artifactStore) {
-      const spec = this.artifactStore.get(specArtifactId);
-      const roots = (spec?.payload as any)?.testRootPaths;
-      if (Array.isArray(roots) && roots.length > 0) {
-        return roots;
-      }
+    if (!this.artifactStore) {
+      throw new Error(`Cannot execute authoritative tests: ArtifactStore unavailable to resolve TestSpecification [${specArtifactId}]`);
     }
-    // Only permit 'tests' if spec does not override
-    return ['tests'];
+    const spec = this.artifactStore.get(specArtifactId);
+    if (!spec) {
+      throw new Error(`Cannot execute authoritative tests: Accepted TestSpecification [${specArtifactId}] not found in store`);
+    }
+    const roots = (spec.payload as any)?.testRootPaths;
+    if (!Array.isArray(roots) || roots.length === 0) {
+      throw new Error(`Cannot execute authoritative tests: TestSpecification [${specArtifactId}] does not define valid testRootPaths`);
+    }
+    return roots;
   }
 
   private gatherAuthoritativeTestFiles(roots: string[]): TestFileEntry[] {

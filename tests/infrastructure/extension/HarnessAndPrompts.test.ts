@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { AgentPromptFactory } from '../../../src/agents/AgentPrompts.js';
 import { RealDeterministicTestRunner } from '../../../src/infrastructure/testing/RealDeterministicTestRunner.js';
+import { ArtifactStore } from '../../../src/domain/artifacts/ArtifactStore.js';
+import { ArtifactValidator } from '../../../src/domain/artifacts/ArtifactValidator.js';
 
 describe('Layered Governance Sub-Prompts (§5, §6, §46-§48)', () => {
   it('layers the base governance prompt and 0120 test-authoring invariants', () => {
@@ -31,22 +33,65 @@ describe('Layered Governance Sub-Prompts (§5, §6, §46-§48)', () => {
   });
 });
 
-describe('RealDeterministicTestRunner (Dogfooding)', () => {
-  it('hashes real test files in the workspace and verifies live subprocess execution', async () => {
-    const runner = new RealDeterministicTestRunner(process.cwd());
+describe('RealDeterministicTestRunner (Authoritative Scoping §28, §31)', () => {
+  const validator = new ArtifactValidator();
+  const store = new ArtifactStore(validator);
+
+  it('refuses execution if accepted TestSpecification is missing (Fail-Closed)', async () => {
+    const runner = new RealDeterministicTestRunner(process.cwd(), store);
+    await expect(runner.execute({
+      workflowId: 'self-test',
+      taskId: 'test-fail-closed',
+      testSpecificationArtifactId: 'non-existent-spec',
+      testSuiteContentHash: '',
+      repositoryRevision: 'local-head',
+      dependencyLockHash: 'local-lock',
+      executionCommand: 'npm test'
+    })).rejects.toThrow(/Accepted TestSpecification \[non-existent-spec\] not found in store/);
+  });
+
+  it('hashes real test files strictly within declared testRootPaths and executes', async () => {
+    store.save({
+      artifactId: 'art-self-spec',
+      artifactType: 'TestSpecification',
+      schemaVersion: '1.0.0',
+      workflowId: 'self-test',
+      taskId: 'task-1',
+      agentId: '0120',
+      createdAt: new Date().toISOString(),
+      parentArtifactIds: [],
+      sourceRefs: [],
+      status: 'ACCEPTED',
+      payload: {
+        masterSpecificationArtifactId: 'art-spec',
+        sprintSpecificationArtifactId: 'art-sprint',
+        testCases: [{ id: 'TC1', requirementIds: ['R1'], acceptanceCriteriaIds: ['A1'], category: 'UNIT', description: 'd', preconditions: [], inputs: [], expectedBehavior: ['p'], failureCondition: ['f'], testPath: 'tests/a.ts', testSymbol: 's' }],
+        requirementCoverage: [{ requirementId: 'R1', disposition: 'AUTOMATED' }],
+        invariants: [],
+        fixtures: [],
+        testFramework: 'vitest',
+        testRootPaths: ['tests'],
+        protectedPaths: ['src/**'],
+        executionCommand: 'npm test',
+        testSuiteContentHash: '0'.repeat(64),
+        unresolvedQuestions: []
+      }
+    });
+
+    const runner = new RealDeterministicTestRunner(process.cwd(), store);
     const result = await runner.execute({
       workflowId: 'self-test',
       taskId: 'test-dogfood',
-      testSpecificationArtifactId: 'art-self',
-      testSuiteContentHash: '', // Dynamic test calculation
+      testSpecificationArtifactId: 'art-self-spec',
+      testSuiteContentHash: '',
       repositoryRevision: 'local-head',
       dependencyLockHash: 'local-lock',
-      executionCommand: 'node -e "console.log(\'deterministic test runner verified\'); process.exit(0);"'
+      executionCommand: 'node -e "console.log(\'authoritative test runner verified\'); process.exit(0);"'
     });
 
     expect(result.testSuiteContentHash).toHaveLength(64);
     expect(result.environmentFingerprint).toContain('node-');
     expect(result.status).toBe('PASSED');
-    expect(result.rawOutput).toContain('deterministic test runner verified');
+    expect(result.rawOutput).toContain('authoritative test runner verified');
   });
 });

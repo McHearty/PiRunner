@@ -6,6 +6,8 @@ export interface PiSessionLike {
   prompt(text: string): Promise<void>;
   abort(): Promise<void>;
   dispose(): Promise<void>;
+  subscribe?: (callback: (event: any) => void) => void;
+  getLastAssistantText?: () => string;
 }
 
 export type PiSessionFactory = (options: {
@@ -19,11 +21,16 @@ export class PiAgentRunner implements AgentRunner {
   private readonly activeSessions = new Map<string, PiSessionLike>();
   private readonly executionStates = new Map<string, AgentExecution>();
   private readonly eventQueues = new Map<string, AgentEvent[]>();
+  private readonly activeInvocations = new Map<string, AgentInvocation>();
 
   constructor(
     private readonly workspaceRoot: string = process.cwd(),
     private readonly sessionFactory?: PiSessionFactory
   ) {}
+
+  public getInvocation(invocationId: string): AgentInvocation | undefined {
+    return this.activeInvocations.get(invocationId);
+  }
 
   public async start(invocation: AgentInvocation): Promise<AgentExecution> {
     const agentSpec = AGENT_REGISTRY[invocation.agentId];
@@ -36,8 +43,9 @@ export class PiAgentRunner implements AgentRunner {
     };
     this.executionStates.set(invocation.invocationId, execution);
     this.eventQueues.set(invocation.invocationId, []);
+    this.activeInvocations.set(invocation.invocationId, invocation);
 
-    // Tool Interceptor: strictly bound to invocation.agentId (§51, §52)
+    // Invocation-Scoped Tool Interceptor (§51, §52)
     const toolInterceptor = async (toolName: string, args: Record<string, unknown>): Promise<boolean> => {
       if (toolName === 'write' || toolName === 'edit') {
         const filePath = (args.path || args.filePath || '') as string;
@@ -54,7 +62,6 @@ export class PiAgentRunner implements AgentRunner {
 
       if (toolName === 'bash' || toolName === 'exec' || toolName === 'shell') {
         const cmd = (args.command || args.cmd || '') as string;
-        // Strictly block remote pushes or destructive repository checkout/reset (§51)
         if (cmd.includes('git push') || cmd.includes('git reset --hard') || cmd.includes('git checkout -f')) {
           this.emitEvent(invocation.invocationId, {
             invocationId: invocation.invocationId,
@@ -87,7 +94,8 @@ export class PiAgentRunner implements AgentRunner {
       this.activeSessions.set(invocation.invocationId, session);
       await session.prompt(invocation.prompt);
       execution.status = 'COMPLETED';
-      execution.rawOutput = accumulatedOutput || `Agent ${invocation.agentId} completed task ${invocation.taskId}`;
+      const lastText = typeof session.getLastAssistantText === 'function' ? session.getLastAssistantText() : '';
+      execution.rawOutput = lastText || accumulatedOutput || `Agent ${invocation.agentId} completed task ${invocation.taskId}`;
     } else {
       try {
         const piModule: any = await import('@earendil-works/pi-coding-agent');
@@ -97,9 +105,28 @@ export class PiAgentRunner implements AgentRunner {
             systemPrompt
           });
           this.activeSessions.set(invocation.invocationId, session);
+
+          // Wire real Pi session event streaming via session.subscribe (§4.1)
+          if (typeof session.subscribe === 'function') {
+            session.subscribe((event: any) => {
+              if (event.type === 'message_update' && event.assistantMessageEvent?.type === 'text_delta') {
+                const delta = event.assistantMessageEvent.delta;
+                accumulatedOutput += delta;
+                this.emitEvent(invocation.invocationId, {
+                  invocationId: invocation.invocationId,
+                  type: 'TEXT_DELTA',
+                  payload: { delta },
+                  timestamp: new Date().toISOString()
+                });
+              }
+            });
+          }
+
           await session.prompt(invocation.prompt);
+
+          const lastText = typeof session.getLastAssistantText === 'function' ? session.getLastAssistantText() : '';
           execution.status = 'COMPLETED';
-          execution.rawOutput = accumulatedOutput;
+          execution.rawOutput = lastText || accumulatedOutput;
         }
       } catch (err: any) {
         execution.status = 'FAILED';
@@ -141,6 +168,7 @@ export class PiAgentRunner implements AgentRunner {
     }
     this.executionStates.delete(invocationId);
     this.eventQueues.delete(invocationId);
+    this.activeInvocations.delete(invocationId);
   }
 
   private emitEvent(invocationId: string, event: AgentEvent): void {
