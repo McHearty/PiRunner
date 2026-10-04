@@ -32,6 +32,7 @@ export const TRANSITION_REGISTRY: readonly TransitionDefinition[] = [
   { id: 'T-001B', from: 'PROJECT_DISCOVERY', to: 'STATE_RECOVERY', guards: [g('G-PROJECT-005'), g('G-PROJECT-006'), g('G-REPO-000')], sideEffects: [{ id: 'SE-EVT-001B', description: 'RESUME_RECOVERY_STARTED' }], humanApproval: 'NEVER' },
   { id: 'T-002A', from: 'PROJECT_INTAKE', to: 'PROJECT_BASELINE', guards: [g('G-REPO-001A'), g('G-PROJECT-007')], sideEffects: [{ id: 'SE-EVT-002A', description: 'BASELINE_ESTABLISHED' }], humanApproval: 'NEVER' },
   { id: 'T-002B', from: 'PROJECT_BASELINE', to: 'KNOWLEDGE_SYNC', guards: [g('G-PROJECT-008'), g('G-REPO-002A')], sideEffects: [{ id: 'SE-EVT-002B', description: 'ADOPTION_ADVANCED_TO_SYNC' }], humanApproval: 'NEVER' },
+  { id: 'T-002C', from: 'KNOWLEDGE_SYNC', to: 'PLANNING', guards: [g('G-ART-022')], sideEffects: [{ id: 'SE-EVT-002C', description: 'ADOPTION_ADVANCED_TO_PLANNING' }], humanApproval: 'NEVER' },
   { id: 'T-003A', from: 'STATE_RECOVERY', to: 'STATE_VALIDATION', guards: [g('G-STATE-001'), g('G-STATE-002'), g('G-STATE-003')], sideEffects: [{ id: 'SE-EVT-003A', description: 'STATE_REPLAY_VALIDATED' }], humanApproval: 'NEVER' },
   { id: 'T-003B', from: 'STATE_VALIDATION', to: '*', guards: [g('G-STATE-006'), g('G-STATE-007'), g('G-STATE-008'), g('G-STATE-009'), g('G-STATE-010')], sideEffects: [{ id: 'SE-EVT-003B', description: 'RESUME_TO_CANONICAL' }], humanApproval: 'NEVER' },
   { id: 'T-003C', from: 'STATE_VALIDATION', to: 'REPOSITORY_CONFLICT', guards: [g('G-STATE-011')], sideEffects: [{ id: 'SE-EVT-003C', description: 'RESUME_MISMATCH_FROZEN' }], humanApproval: 'NEVER' },
@@ -106,19 +107,15 @@ export const TRANSITION_REGISTRY: readonly TransitionDefinition[] = [
 ];
 
 export function findTransition(from: WorkflowState, to: WorkflowState): TransitionDefinition | undefined {
-  // 1. Exact match takes highest precedence
   const exact = TRANSITION_REGISTRY.find(t => t.from === from && t.to === to);
   if (exact) return exact;
 
-  // 2. Exact 'from', wildcard 'to' (e.g. T-003B: STATE_VALIDATION -> *)
   const fromMatch = TRANSITION_REGISTRY.find(t => t.from === from && t.to === '*');
   if (fromMatch) return fromMatch;
 
-  // 3. Wildcard 'from', exact 'to' (e.g. T-102: * -> REPOSITORY_CONFLICT)
   const toMatch = TRANSITION_REGISTRY.find(t => t.from === '*' && t.to === to);
   if (toMatch) return toMatch;
 
-  // 4. Wildcard both
   return TRANSITION_REGISTRY.find(t => t.from === '*' && t.to === '*');
 }
 

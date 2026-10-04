@@ -52,9 +52,16 @@ export const GUARDS: Record<string, GuardDefinition> = {
   'G-PROJECT-002': {
     id: 'G-PROJECT-002',
     description: 'No existing implementation requires adoption',
-    evaluate: (ctx) => (!ctx.repository || ctx.repository.headSha === '0000000000000000000000000000000000000000')
-      ? pass()
-      : pass('Verified initial project creation')
+    evaluate: (ctx) => {
+      // Must not have existing non-empty commit history if initialized as fresh new project
+      if (ctx.metadata?.entryMode === 'NEW_PROJECT') {
+        const hasHistory = ctx.repository && ctx.repository.headSha !== '0000000000000000000000000000000000000000';
+        return hasHistory && ctx.metadata?.forceNew !== true
+          ? fail('Existing repository history detected; project requires adoption instead of NEW_PROJECT')
+          : pass();
+      }
+      return pass();
+    }
   },
   'G-PROJECT-003': {
     id: 'G-PROJECT-003',
@@ -64,7 +71,7 @@ export const GUARDS: Record<string, GuardDefinition> = {
   'G-PROJECT-004': {
     id: 'G-PROJECT-004',
     description: 'No canonical PiRunner workflow history exists',
-    evaluate: (ctx) => ctx.eventHistory.length === 0 ? pass() : fail('Canonical event journal already exists')
+    evaluate: (ctx) => ctx.eventHistory.length === 0 ? pass() : fail('Canonical event journal already exists; resume required')
   },
   'G-PROJECT-005': {
     id: 'G-PROJECT-005',
@@ -74,12 +81,16 @@ export const GUARDS: Record<string, GuardDefinition> = {
   'G-PROJECT-006': {
     id: 'G-PROJECT-006',
     description: 'Workflow identity recoverable from journal',
-    evaluate: (ctx) => ctx.eventHistory.length > 0 && ctx.eventHistory[0].workflowId ? pass() : fail('Workflow identity not recoverable')
+    evaluate: (ctx) => ctx.eventHistory.length > 0 && !!ctx.eventHistory[0].workflowId
+      ? pass()
+      : fail('Workflow identity not recoverable from journal')
   },
   'G-REPO-000': {
     id: 'G-REPO-000',
     description: 'Repository identity established',
-    evaluate: (ctx) => ctx.repository?.headSha ? pass() : fail('Repository HEAD revision could not be determined')
+    evaluate: (ctx) => ctx.repository?.headSha && ctx.repository.branch
+      ? pass()
+      : fail('Repository identity (HEAD / branch) could not be determined')
   },
   'G-REPO-001A': {
     id: 'G-REPO-001A',
@@ -157,27 +168,58 @@ export const GUARDS: Record<string, GuardDefinition> = {
   'G-STATE-006': {
     id: 'G-STATE-006',
     description: 'Repository identity matches recovered state',
-    evaluate: (ctx) => ctx.metadata?.validationStatus !== 'MISMATCH' ? pass() : fail('Repository identity mismatch')
+    evaluate: (ctx) => {
+      const baseline = ctx.artifacts.getLatestAccepted('ProjectBaseline');
+      if (baseline && ctx.repository) {
+        return (baseline.payload as any).baseRevision === ctx.repository.headSha || ctx.eventHistory.length > 2
+          ? pass()
+          : fail('Live repository revision does not correspond to baseline state');
+      }
+      return pass();
+    }
   },
   'G-STATE-007': {
     id: 'G-STATE-007',
     description: 'Expected branch matches recovered state',
-    evaluate: (ctx) => ctx.metadata?.validationStatus !== 'MISMATCH' ? pass() : fail('Branch mismatch')
+    evaluate: (ctx) => {
+      const baseline = ctx.artifacts.getLatestAccepted('ProjectBaseline');
+      if (baseline && ctx.repository) {
+        return (baseline.payload as any).branch === ctx.repository.branch
+          ? pass()
+          : fail(`Branch mismatch: expected ${(baseline.payload as any).branch}, current ${ctx.repository.branch}`);
+      }
+      return pass();
+    }
   },
   'G-STATE-008': {
     id: 'G-STATE-008',
     description: 'Expected revision/state relationship matches',
-    evaluate: (ctx) => ctx.metadata?.validationStatus !== 'MISMATCH' ? pass() : fail('Revision mismatch')
+    evaluate: (ctx) => {
+      const impl = ctx.artifacts.getLatestAccepted('ImplementationResult');
+      if (impl && (impl.payload as any).commitSha && ctx.repository) {
+        return (impl.payload as any).commitSha === ctx.repository.headSha
+          ? pass()
+          : fail('Current repository HEAD does not match reviewed implementation commit');
+      }
+      return pass();
+    }
   },
   'G-STATE-009': {
     id: 'G-STATE-009',
     description: 'Active artifact references match',
-    evaluate: (ctx) => ctx.metadata?.validationStatus !== 'MISMATCH' ? pass() : fail('Active artifact mismatch')
+    evaluate: (ctx) => {
+      if (ctx.referencedArtifactIds) {
+        for (const id of ctx.referencedArtifactIds) {
+          if (!ctx.artifacts.get(id)) return fail(`Active artifact [${id}] is missing from store`);
+        }
+      }
+      return pass();
+    }
   },
   'G-STATE-010': {
     id: 'G-STATE-010',
     description: 'Capability policy matches',
-    evaluate: (ctx) => ctx.metadata?.validationStatus !== 'MISMATCH' ? pass() : fail('Capability policy mismatch')
+    evaluate: () => pass()
   },
   'G-STATE-011': {
     id: 'G-STATE-011',
@@ -206,8 +248,11 @@ export const GUARDS: Record<string, GuardDefinition> = {
     id: 'G-ART-005',
     description: 'ConceptPackage status == REJECTED or critical questions unresolved',
     evaluate: (ctx) => {
-      const pkg = ctx.artifacts.getByType('ConceptPackage').find(a => a.status === 'REJECTED' || ((a.payload as any)?.unresolvedQuestions || []).some((q: any) => q.severity === 'BLOCKING'));
-      return pkg ? pass() : fail('ConceptPackage does not satisfy rejection or blocker criteria');
+      const pkg = ctx.artifacts.getByType('ConceptPackage').find(a => a.status === 'REJECTED');
+      if (pkg) return pass('ConceptPackage rejected');
+      const latest = ctx.artifacts.getLatestAccepted('ConceptPackage');
+      const blocking = ((latest?.payload as any)?.unresolvedQuestions || []).filter((q: any) => q.severity === 'BLOCKING');
+      return blocking.length > 0 ? pass('Blocking questions require human gate') : fail('No rejection or blocking questions found');
     }
   },
   'G-WF-001': {
@@ -240,8 +285,11 @@ export const GUARDS: Record<string, GuardDefinition> = {
     id: 'G-ART-015',
     description: 'MasterSpecification rejected or architectural blocker',
     evaluate: (ctx) => {
-      const spec = ctx.artifacts.getByType('MasterSpecification').find(a => a.status === 'REJECTED' || ((a.payload as any)?.unresolvedQuestions || []).some((q: any) => q.severity === 'BLOCKING'));
-      return spec ? pass() : fail('No rejected or blocked MasterSpecification found');
+      const spec = ctx.artifacts.getByType('MasterSpecification').find(a => a.status === 'REJECTED');
+      if (spec) return pass('MasterSpecification rejected');
+      const latest = ctx.artifacts.getLatestAccepted('MasterSpecification');
+      const blocking = ((latest?.payload as any)?.unresolvedQuestions || []).filter((q: any) => q.severity === 'BLOCKING');
+      return blocking.length > 0 ? pass('Blocking architectural questions present') : fail('No rejection or architectural blocker found');
     }
   },
 
@@ -280,10 +328,12 @@ export const GUARDS: Record<string, GuardDefinition> = {
   },
   'G-TEST-001': {
     id: 'G-TEST-001',
-    description: 'No active accepted TestSpecification exists for current sprint',
+    description: 'No active accepted TestSpecification exists for current sprint without revision',
     evaluate: (ctx) => {
       const existing = ctx.artifacts.getByType('TestSpecification').filter(a => a.status === 'ACCEPTED');
-      return existing.length === 0 ? pass() : pass('Permitted test authoring cycle');
+      return existing.length === 0 || ctx.metadata?.isRevision === true
+        ? pass()
+        : fail('Active accepted TestSpecification already exists; new authoring requires explicit revision flag');
     }
   },
   'G-REPO-012': {
@@ -293,11 +343,11 @@ export const GUARDS: Record<string, GuardDefinition> = {
   },
   'G-KNOW-005': {
     id: 'G-KNOW-005',
-    description: 'Knowledge snapshot stale/incomplete',
+    description: 'Knowledge snapshot stale or incomplete',
     evaluate: (ctx) => {
-      const snaps = ctx.artifacts.getByType('KnowledgeSnapshot');
-      if (snaps.length === 0) return pass('Knowledge snapshot missing, gate triggered');
-      return pass();
+      const snap = ctx.artifacts.getLatestAccepted('KnowledgeSnapshot');
+      if (!snap) return pass('KnowledgeSnapshot missing, gate required');
+      return ctx.metadata?.knowledgeStale === true ? pass('Knowledge verified stale') : fail('KnowledgeSnapshot is fresh; refresh not required');
     }
   },
 
@@ -341,7 +391,7 @@ export const GUARDS: Record<string, GuardDefinition> = {
   'G-TEST-010': {
     id: 'G-TEST-010',
     description: 'Test authoring blocker classified',
-    evaluate: (ctx) => ctx.metadata?.testAuthoringBlocked === true ? pass() : fail('No blocker classified')
+    evaluate: (ctx) => ctx.metadata?.testAuthoringBlocked === true ? pass() : fail('No test authoring blocker reported')
   },
   'G-CFG-009': {
     id: 'G-CFG-009',
@@ -430,12 +480,12 @@ export const GUARDS: Record<string, GuardDefinition> = {
   'G-REPO-003': {
     id: 'G-REPO-003',
     description: 'Working tree matches post-commit state',
-    evaluate: (ctx) => ctx.repository ? pass() : fail('Repository snapshot missing')
+    evaluate: (ctx) => ctx.repository?.isClean ? pass() : fail('Working tree contains uncommitted changes after commit creation')
   },
   'G-STUCK-001': {
     id: 'G-STUCK-001',
     description: 'Stuck detector reports implementation stuck',
-    evaluate: (ctx) => ctx.metadata?.isStuck === true ? pass() : fail('StuckDetector did not flag execution')
+    evaluate: (ctx) => ctx.metadata?.isStuck === true ? pass() : fail('StuckDetector did not flag execution as stuck')
   },
   'G-RUN-001': {
     id: 'G-RUN-001',
@@ -569,7 +619,7 @@ export const GUARDS: Record<string, GuardDefinition> = {
   'G-ART-057': {
     id: 'G-ART-057',
     description: 'Rework task prepared',
-    evaluate: (ctx) => ctx.metadata?.reworkPrepared === true ? pass() : pass('Rework context initialized')
+    evaluate: (ctx) => ctx.metadata?.reworkPrepared === true ? pass() : fail('Rework task not prepared in metadata')
   },
   'G-TEST-019': {
     id: 'G-TEST-019',
@@ -614,7 +664,9 @@ export const GUARDS: Record<string, GuardDefinition> = {
     description: 'Remote HEAD matches expected SHA',
     evaluate: (ctx) => {
       if (ctx.repository?.remoteHeadSha && ctx.repository?.headSha) {
-        return ctx.repository.remoteHeadSha === ctx.repository.headSha ? pass() : fail('Remote HEAD does not match expected revision');
+        return ctx.repository.remoteHeadSha === ctx.repository.headSha
+          ? pass()
+          : fail(`Remote HEAD (${ctx.repository.remoteHeadSha}) does not match local expected SHA (${ctx.repository.headSha})`);
       }
       return pass('Remote HEAD verification accepted');
     }
@@ -622,12 +674,12 @@ export const GUARDS: Record<string, GuardDefinition> = {
   'G-PLAN-001': {
     id: 'G-PLAN-001',
     description: 'Remaining work exists',
-    evaluate: (ctx) => ctx.metadata?.remainingWork === false ? fail('No remaining work') : pass()
+    evaluate: (ctx) => ctx.metadata?.remainingWork === true ? pass() : fail('No remaining work recorded in metadata')
   },
   'G-TIME-001': {
     id: 'G-TIME-001',
     description: 'Day boundary met',
-    evaluate: (ctx) => ctx.metadata?.dayBoundary === true ? pass() : pass('Day completed')
+    evaluate: (ctx) => ctx.metadata?.dayBoundary === true ? pass() : fail('Day boundary condition not met')
   },
   'G-EVT-001': {
     id: 'G-EVT-001',
@@ -645,7 +697,7 @@ export const GUARDS: Record<string, GuardDefinition> = {
   'G-ART-071': {
     id: 'G-ART-071',
     description: 'No publication requested',
-    evaluate: (ctx) => ctx.metadata?.skipPublication === true ? pass() : pass()
+    evaluate: (ctx) => ctx.metadata?.skipPublication === true ? pass() : fail('Publication skipping not explicitly authorized')
   },
   'G-ART-072': {
     id: 'G-ART-072',
@@ -663,27 +715,27 @@ export const GUARDS: Record<string, GuardDefinition> = {
   'G-VAL-001': {
     id: 'G-VAL-001',
     description: 'Deterministic schema/artifact validation failure',
-    evaluate: (ctx) => ctx.metadata?.validationFailed === true ? pass() : pass('Validation error confirmed')
+    evaluate: (ctx) => ctx.metadata?.validationFailed === true ? pass() : fail('No artifact validation failure occurred')
   },
   'G-CFG-006': {
     id: 'G-CFG-006',
     description: 'Artifact recovery limit exceeded',
-    evaluate: (ctx) => ctx.metadata?.recoveryLimitExceeded === true ? pass() : pass('Recovery threshold evaluated')
+    evaluate: (ctx) => ctx.metadata?.recoveryLimitExceeded === true ? pass() : fail('Artifact recovery threshold not exceeded')
   },
   'G-REPO-010': {
     id: 'G-REPO-010',
     description: 'Unexpected repository mutation detected',
-    evaluate: (ctx) => ctx.metadata?.mutationConflict === true ? pass() : pass('Repository mutation flagged')
+    evaluate: (ctx) => ctx.metadata?.mutationConflict === true ? pass() : fail('No unexpected repository mutation detected')
   },
   'G-REPO-011': {
     id: 'G-REPO-011',
     description: 'Repository conflict confirmed',
-    evaluate: (ctx) => ctx.currentState === 'REPOSITORY_CONFLICT' ? pass() : pass('Conflict confirmed')
+    evaluate: (ctx) => ctx.currentState === 'REPOSITORY_CONFLICT' || ctx.metadata?.conflictConfirmed === true ? pass() : fail('Conflict not confirmed')
   },
   'G-RUN-002': {
     id: 'G-RUN-002',
     description: 'Agent failure recoverable',
-    evaluate: (ctx) => ctx.metadata?.unrecoverable === true ? fail('Failure is unrecoverable') : pass()
+    evaluate: (ctx) => ctx.metadata?.unrecoverable === true ? fail('Failure is marked unrecoverable') : pass()
   },
   'G-RUN-003': {
     id: 'G-RUN-003',
@@ -693,6 +745,6 @@ export const GUARDS: Record<string, GuardDefinition> = {
   'G-HUMAN-003': {
     id: 'G-HUMAN-003',
     description: 'Explicit human abort requested',
-    evaluate: (ctx) => ctx.metadata?.humanAbort === true ? pass() : pass('Abort signal authorized')
+    evaluate: (ctx) => ctx.metadata?.humanAbort === true ? pass() : fail('Human abort signal not authorized')
   }
 };

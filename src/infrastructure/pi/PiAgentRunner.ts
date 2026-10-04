@@ -28,6 +28,8 @@ export class PiAgentRunner implements AgentRunner {
   public async start(invocation: AgentInvocation): Promise<AgentExecution> {
     const agentSpec = AGENT_REGISTRY[invocation.agentId];
     const systemPrompt = agentSpec ? agentSpec.systemPrompt : 'You are an autonomous engineering agent.';
+    let accumulatedOutput = '';
+
     const execution: AgentExecution = {
       invocationId: invocation.invocationId,
       status: 'RUNNING'
@@ -35,8 +37,8 @@ export class PiAgentRunner implements AgentRunner {
     this.executionStates.set(invocation.invocationId, execution);
     this.eventQueues.set(invocation.invocationId, []);
 
+    // Tool Interceptor: strictly bound to invocation.agentId (§51, §52)
     const toolInterceptor = async (toolName: string, args: Record<string, unknown>): Promise<boolean> => {
-      // 1. File write/edit protection
       if (toolName === 'write' || toolName === 'edit') {
         const filePath = (args.path || args.filePath || '') as string;
         if (!PathCapabilityEnforcer.isWriteAllowed(invocation.agentId, filePath)) {
@@ -50,14 +52,14 @@ export class PiAgentRunner implements AgentRunner {
         }
       }
 
-      // 2. Command/Shell execution capability protection (§51)
       if (toolName === 'bash' || toolName === 'exec' || toolName === 'shell') {
         const cmd = (args.command || args.cmd || '') as string;
-        if (cmd.includes('git push')) {
+        // Strictly block remote pushes or destructive repository checkout/reset (§51)
+        if (cmd.includes('git push') || cmd.includes('git reset --hard') || cmd.includes('git checkout -f')) {
           this.emitEvent(invocation.invocationId, {
             invocationId: invocation.invocationId,
             type: 'FAILED',
-            payload: { error: `Command violation: Agent ${invocation.agentId} is strictly forbidden from executing remote push` },
+            payload: { error: `Command violation: Agent ${invocation.agentId} forbidden from executing '${cmd}'` },
             timestamp: new Date().toISOString()
           });
           return false;
@@ -72,6 +74,7 @@ export class PiAgentRunner implements AgentRunner {
         cwd: this.workspaceRoot,
         systemPrompt,
         onTextDelta: (delta: string) => {
+          accumulatedOutput += delta;
           this.emitEvent(invocation.invocationId, {
             invocationId: invocation.invocationId,
             type: 'TEXT_DELTA',
@@ -84,7 +87,7 @@ export class PiAgentRunner implements AgentRunner {
       this.activeSessions.set(invocation.invocationId, session);
       await session.prompt(invocation.prompt);
       execution.status = 'COMPLETED';
-      execution.rawOutput = `Agent ${invocation.agentId} completed task ${invocation.taskId}`;
+      execution.rawOutput = accumulatedOutput || `Agent ${invocation.agentId} completed task ${invocation.taskId}`;
     } else {
       try {
         const piModule: any = await import('@earendil-works/pi-coding-agent');
@@ -96,9 +99,9 @@ export class PiAgentRunner implements AgentRunner {
           this.activeSessions.set(invocation.invocationId, session);
           await session.prompt(invocation.prompt);
           execution.status = 'COMPLETED';
+          execution.rawOutput = accumulatedOutput;
         }
       } catch (err: any) {
-        // EPISTEMIC HONESTY: Mark FAILED on runtime absence, never fabricate success (§2)
         execution.status = 'FAILED';
         execution.rawOutput = `Pi agent runtime unavailable: ${err.message}`;
         this.emitEvent(invocation.invocationId, {
@@ -115,27 +118,19 @@ export class PiAgentRunner implements AgentRunner {
 
   public async send(invocationId: string, message: AgentMessage): Promise<void> {
     const session = this.activeSessions.get(invocationId);
-    if (session) {
-      await session.prompt(message.content);
-    }
+    if (session) await session.prompt(message.content);
   }
 
   public async cancel(invocationId: string): Promise<void> {
     const session = this.activeSessions.get(invocationId);
-    if (session) {
-      await session.abort();
-    }
+    if (session) await session.abort();
     const exec = this.executionStates.get(invocationId);
-    if (exec) {
-      exec.status = 'CANCELLED';
-    }
+    if (exec) exec.status = 'CANCELLED';
   }
 
   public async *observe(invocationId: string): AsyncIterable<AgentEvent> {
     const queue = this.eventQueues.get(invocationId) || [];
-    for (const evt of queue) {
-      yield evt;
-    }
+    for (const evt of queue) yield evt;
   }
 
   public async close(invocationId: string): Promise<void> {
@@ -150,8 +145,6 @@ export class PiAgentRunner implements AgentRunner {
 
   private emitEvent(invocationId: string, event: AgentEvent): void {
     const queue = this.eventQueues.get(invocationId);
-    if (queue) {
-      queue.push(event);
-    }
+    if (queue) queue.push(event);
   }
 }

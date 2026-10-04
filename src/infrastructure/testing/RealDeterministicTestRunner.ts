@@ -12,11 +12,14 @@ export class RealDeterministicTestRunner implements TestRunner {
   ) {}
 
   public async execute(request: TestExecutionRequest): Promise<TestExecutionResultData> {
-    // 1. Resolve testRootPaths strictly from accepted TestSpecification (§28, §31)
+    // 1. Resolve testRootPaths strictly from accepted TestSpecification (§28, §31) - NO SILENT FALLBACK
     const testRoots = this.resolveAuthoritativeTestRoots(request.testSpecificationArtifactId);
 
     // 2. Gather authoritative test files from declared roots only
     const testFiles = this.gatherAuthoritativeTestFiles(testRoots);
+    if (testFiles.length === 0) {
+      throw new Error(`Authoritative test suite contains zero executable test files in roots: [${testRoots.join(', ')}]`);
+    }
 
     // 3. Compute canonical content hash of the authoritative test suite
     const liveSuiteHash = TestSuiteHasher.hash({
@@ -38,7 +41,6 @@ export class RealDeterministicTestRunner implements TestRunner {
     const durationMs = Date.now() - startMs;
     const rawOutput = `${stdout}\n${stderr}`.trim();
 
-    // 6. Record deterministic execution result
     const isPassed = exitCode === 0;
     const executedTests: IndividualTestRecord[] = [
       {
@@ -74,6 +76,7 @@ export class RealDeterministicTestRunner implements TestRunner {
         return roots;
       }
     }
+    // Only permit 'tests' if spec does not override
     return ['tests'];
   }
 

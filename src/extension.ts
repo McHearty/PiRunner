@@ -80,6 +80,15 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   }
 
+  function getTargetTransitionForArtifact(state: WorkflowState, artifactType: string): WorkflowState | null {
+    if (state === 'CONCEPT' && artifactType === 'ConceptPackage') return 'CONCEPT_REVIEW';
+    if (state === 'SPECIFICATION' && artifactType === 'MasterSpecification') return 'SPECIFICATION_REVIEW';
+    if (state === 'PLANNING' && artifactType === 'SprintSpecification') return 'KNOWLEDGE_SYNC';
+    if (state === 'TEST_AUTHORING' && artifactType === 'TestSpecification') return 'TEST_READY';
+    if (state === 'IMPLEMENTATION' && artifactType === 'ImplementationResult') return 'COMMIT_CREATED';
+    return null;
+  }
+
   function getRealDependencyLockHash(): string {
     const lockPath = join(root, 'package-lock.json');
     if (existsSync(lockPath)) {
@@ -88,11 +97,11 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     return createHash('sha256').update('no-lockfile-available').digest('hex');
   }
 
-  // Canonical Startup Pipeline (§5, §18) with error propagation
+  // Canonical Startup Pipeline (§5, §18) - Error canonicalization to AGENT_FAILED
   if (controller.getState() === 'PROJECT_DISCOVERY') {
     if (discovery.entryMode === 'RESUME_WORKFLOW') {
       const recovery = StateRecoveryService.recover(eventStore as any, workflowId);
-      const validation = StateValidationService.validate(recovery, discovery.repositorySnapshot);
+      const validation = StateValidationService.validate(recovery, discovery.repositorySnapshot, artifactStore as any, root);
 
       controller.transition('STATE_RECOVERY', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'RESUME_WORKFLOW' } })
         .then(() => controller.transition('STATE_VALIDATION', { actorType: 'SYSTEM', actorId: '0000' }))
@@ -103,8 +112,9 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
             return controller.transition('REPOSITORY_CONFLICT', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MISMATCH' } });
           }
         })
-        .catch((err) => {
-          console.error('[PiRunner Startup Error]:', err.message);
+        .catch(async (err) => {
+          console.error('[PiRunner Startup Resume Failure]:', err.message);
+          await controller.transition('AGENT_FAILED', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { unrecoverable: true, startupError: err.message } }).catch(() => {});
         });
     } else if (discovery.entryMode === 'ADOPT_EXISTING_PROJECT') {
       controller.transition('PROJECT_INTAKE', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' } })
@@ -114,17 +124,17 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
           return controller.transition('PROJECT_BASELINE', { actorType: 'SYSTEM', actorId: '0000' });
         })
         .then(() => controller.transition('KNOWLEDGE_SYNC', { actorType: 'SYSTEM', actorId: '0000' }))
-        .catch((err) => {
-          console.error('[PiRunner Adoption Error]:', err.message);
+        .then(() => controller.transition('PLANNING', { actorType: 'SYSTEM', actorId: '0000' })) // Complete adoption toward PLANNING (§5.2)
+        .catch(async (err) => {
+          console.error('[PiRunner Adoption Failure]:', err.message);
+          await controller.transition('AGENT_FAILED', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { unrecoverable: true, adoptionError: err.message } }).catch(() => {});
         });
     }
   }
 
   let activeAgentId = syncAgentToState(controller.getState());
 
-  // Comprehensive Tool-level capability boundary hook (File + Shell + Git)
   pi.on('tool_call', async (call) => {
-    // 1. Path write enforcement
     if (call.toolName === 'write' || call.toolName === 'edit') {
       const filePath = (call.args.path || call.args.filePath || '') as string;
       const allowed = PathCapabilityEnforcer.isWriteAllowed(activeAgentId, filePath);
@@ -132,12 +142,10 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
         throw new Error(`[HITM Boundary Violation]: Agent ${activeAgentId} is forbidden from writing to "${filePath}".`);
       }
     }
-
-    // 2. Command / Git execution enforcement (§51)
     if (call.toolName === 'bash' || call.toolName === 'exec' || call.toolName === 'shell') {
       const cmd = (call.args.command || call.args.cmd || '') as string;
-      if (cmd.includes('git push')) {
-        throw new Error(`[HITM Authority Violation]: Agent ${activeAgentId} is strictly forbidden from executing remote push.`);
+      if (cmd.includes('git push') || cmd.includes('git reset --hard')) {
+        throw new Error(`[HITM Authority Violation]: Agent ${activeAgentId} forbidden from executing remote push / destructive command.`);
       }
     }
   });
@@ -153,14 +161,6 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
         `State: [${state}] | Mode: ${discovery.entryMode} | Agent: ${activeAgentId} | TestLock: ${lockSummary}`,
         'info'
       );
-    }
-  });
-
-  pi.registerCommand('hitm-prompt', {
-    description: 'View layered governance sub-prompt for the active agent',
-    handler: async (_args: string, ctx: ExtensionContext) => {
-      const prompt = AgentPromptFactory.createAgentSystemPrompt(activeAgentId);
-      ctx.ui.notify(`Active Sub-Prompt Loaded for Agent ${activeAgentId} (${prompt.length} chars)`, 'info');
     }
   });
 
@@ -225,9 +225,9 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   });
 
-  // Closed-Loop Agent Invocation + Typed Artifact Ingestion (§1, §12, §61)
+  // Closed-Loop: Agent execution -> Artifact Ingestion -> Schema Validation -> State Transition (§1, §12, §61)
   pi.registerCommand('hitm-run', {
-    description: 'Dispatch active agent, ingest typed artifact, validate via schema, and advance workflow',
+    description: 'Dispatch active agent, ingest typed artifact, validate schema, and advance workflow',
     handler: async (taskPrompt: string, ctx: ExtensionContext) => {
       const currentState = controller.getState();
       const expectedType = getExpectedArtifactForState(currentState);
@@ -258,10 +258,10 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
 
         if (execution.status === 'FAILED') {
           ctx.ui.notify(`Agent execution failed: ${execution.rawOutput}`, 'error');
+          await controller.transition('AGENT_FAILED', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { agentExecutionStatus: 'FAILED' } });
           return;
         }
 
-        // Ingest typed artifact from execution output if state expects one
         if (expectedType) {
           const ingestion = ArtifactIngestionService.ingestFromExecution(
             execution,
@@ -280,9 +280,21 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
           }
 
           ctx.ui.notify(`Validated and persisted ${expectedType} [${ingestion.artifact?.artifactId}]`, 'info');
+
+          // Closed Loop: Automatically advance workflow through the transition unlocked by this artifact (§1, §11)
+          const targetTransition = getTargetTransitionForArtifact(currentState, expectedType);
+          if (targetTransition) {
+            try {
+              await controller.transition(targetTransition, { actorType: 'AGENT', actorId: activeAgentId }, { artifactIds: [ingestion.artifact!.artifactId] });
+              activeAgentId = syncAgentToState(controller.getState());
+              ctx.ui.notify(`Workflow advanced automatically to [${controller.getState()}]`, 'info');
+            } catch (transitionErr: any) {
+              ctx.ui.notify(`Transition guard failed: ${transitionErr.message}`, 'warning');
+            }
+          }
         }
 
-        ctx.ui.notify(`Agent ${activeAgentId} run completed successfully.`, 'info');
+        ctx.ui.notify(`Agent ${activeAgentId} loop completed successfully.`, 'info');
       } catch (err: any) {
         ctx.ui.notify(`Agent run exception: ${err.message}`, 'error');
       }

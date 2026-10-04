@@ -17,6 +17,12 @@ describe('Project Discovery, Adoption, and Canonical Resumption (Normative ยง5โ€
   let eventStore: EventStore;
   let gitRepo: GitRepository;
 
+  const virginRepoSnapshot = {
+    branch: 'main',
+    headSha: '0000000000000000000000000000000000000000',
+    isClean: true
+  };
+
   beforeEach(() => {
     validator = new ArtifactValidator();
     artifactStore = new ArtifactStore(validator);
@@ -72,7 +78,7 @@ describe('Project Discovery, Adoption, and Canonical Resumption (Normative ยง5โ€
   });
 
   it('executes canonical resumption pipeline on restart: DISCOVERY -> STATE_RECOVERY -> STATE_VALIDATION -> MATCH (ยง18, ยง19)', async () => {
-    // 1. Session 1: advances workflow to CONCEPT
+    // 1. Session 1: advances workflow to CONCEPT on a fresh project
     const controller1 = new WorkflowController(
       'wf-restart-test',
       artifactStore,
@@ -83,6 +89,7 @@ describe('Project Discovery, Adoption, and Canonical Resumption (Normative ยง5โ€
       'PROJECT_DISCOVERY',
       gitRepo
     );
+    controller1.setRepositorySnapshot(virginRepoSnapshot);
 
     await controller1.transition('CONCEPT', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'NEW_PROJECT' } });
     expect(controller1.getState()).toBe('CONCEPT');
@@ -98,6 +105,7 @@ describe('Project Discovery, Adoption, and Canonical Resumption (Normative ยง5โ€
       'PROJECT_DISCOVERY',
       gitRepo
     );
+    controller2.setRepositorySnapshot(virginRepoSnapshot);
     expect(controller2.getState()).toBe('PROJECT_DISCOVERY');
 
     // 3. Resumption Pipeline executes explicitly
@@ -127,6 +135,7 @@ describe('Project Discovery, Adoption, and Canonical Resumption (Normative ยง5โ€
       'PROJECT_DISCOVERY',
       gitRepo
     );
+    controller.setRepositorySnapshot(virginRepoSnapshot);
 
     // Initial event
     await controller.transition('CONCEPT', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'NEW_PROJECT' } });

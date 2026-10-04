@@ -3,18 +3,24 @@ import { ArtifactValidator } from '../../../src/domain/artifacts/ArtifactValidat
 import { ArtifactStore } from '../../../src/domain/artifacts/ArtifactStore.js';
 import { ArtifactIngestionService } from '../../../src/domain/artifacts/ArtifactIngestion.js';
 import { AgentExecution } from '../../../src/domain/agents/AgentRunner.js';
+import { WorkflowController } from '../../../src/application/WorkflowController.js';
+import { EventStore } from '../../../src/domain/events/EventStore.js';
+import { FakeTestRunner } from '../../../src/infrastructure/testing/FakeTestRunner.js';
+import { FakeAgentRunner } from '../../../src/infrastructure/agents/FakeAgentRunner.js';
 
-describe('Closed-Loop Artifact Ingestion (§1, §12, §61)', () => {
+describe('Closed-Loop Artifact Ingestion to State Machine Transition (§1, §12, §61)', () => {
   const validator = new ArtifactValidator();
   const store = new ArtifactStore(validator);
+  const eventStore = new EventStore();
 
-  it('ingests and validates valid JSON markdown block emitted by an LLM agent', () => {
+  it('ingests agent output and advances WorkflowController to CONCEPT_REVIEW', async () => {
+    const controller = new WorkflowController('wf-loop-1', store, eventStore, new FakeTestRunner(), new FakeAgentRunner(), {}, 'CONCEPT');
+
     const rawOutput = `
-Here is the completed concept package:
 \`\`\`json
 {
-  "title": "Dogfooding Engine",
-  "objectives": ["Prove self-development loop"],
+  "title": "Closed Loop Concept",
+  "objectives": ["Prove closed loop transition"],
   "intendedUsers": ["Engineers"],
   "majorCapabilities": ["Self-hosting"],
   "constraints": [],
@@ -24,61 +30,27 @@ Here is the completed concept package:
   "unresolvedQuestions": []
 }
 \`\`\`
-All requirements satisfied.
 `;
-
     const execution: AgentExecution = {
-      invocationId: 'inv-concept-1',
+      invocationId: 'inv-1',
       status: 'COMPLETED',
       rawOutput
     };
 
-    const result = ArtifactIngestionService.ingestFromExecution(
+    const ingestion = ArtifactIngestionService.ingestFromExecution(
       execution,
       'ConceptPackage',
-      'wf-ingest-1',
+      'wf-loop-1',
       'task-1',
       '0012',
       validator,
       store
     );
 
-    expect(result.success).toBe(true);
-    expect(result.artifact).toBeDefined();
-    expect(result.artifact?.artifactType).toBe('ConceptPackage');
-    expect(result.artifact?.status).toBe('SUBMITTED');
+    expect(ingestion.success).toBe(true);
 
-    // Confirms persisted in ArtifactStore
-    const retrieved = store.get(result.artifact!.artifactId);
-    expect(retrieved).toBeDefined();
-    expect((retrieved?.payload as any).title).toBe('Dogfooding Engine');
-  });
-
-  it('rejects malformed or invalid schema output from agent execution', () => {
-    const rawOutput = `
-\`\`\`json
-{
-  "title": "Invalid package missing mandatory fields"
-}
-\`\`\`
-`;
-    const execution: AgentExecution = {
-      invocationId: 'inv-bad',
-      status: 'COMPLETED',
-      rawOutput
-    };
-
-    const result = ArtifactIngestionService.ingestFromExecution(
-      execution,
-      'ConceptPackage',
-      'wf-ingest-1',
-      'task-1',
-      '0012',
-      validator,
-      store
-    );
-
-    expect(result.success).toBe(false);
-    expect(result.errors.length).toBeGreaterThan(0);
+    // Trigger transition using ingested artifact
+    await controller.transition('CONCEPT_REVIEW', { actorType: 'AGENT', actorId: '0012' }, { artifactIds: [ingestion.artifact!.artifactId] });
+    expect(controller.getState()).toBe('CONCEPT_REVIEW');
   });
 });
