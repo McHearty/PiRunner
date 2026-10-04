@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { WorkflowController } from './application/WorkflowController.js';
 import { ArtifactValidator } from './domain/artifacts/ArtifactValidator.js';
@@ -42,7 +45,9 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     switch (state) {
       case 'PROJECT_DISCOVERY':
       case 'PROJECT_INTAKE':
-      case 'PROJECT_BASELINE': return '0000';
+      case 'PROJECT_BASELINE':
+      case 'STATE_RECOVERY':
+      case 'STATE_VALIDATION': return '0000';
       case 'CONCEPT': return '0012';
       case 'SPECIFICATION': return '0024';
       case 'PLANNING': return '0036';
@@ -57,16 +62,25 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   }
 
-  // Handle Startup Discovery / Recovery / Adoption (§5, §18)
+  function getRealDependencyLockHash(): string {
+    const lockPath = join(root, 'package-lock.json');
+    if (existsSync(lockPath)) {
+      return createHash('sha256').update(readFileSync(lockPath)).digest('hex');
+    }
+    return createHash('sha256').update('no-lockfile-available').digest('hex');
+  }
+
+  // Canonical Startup Pipeline (§5, §18)
   if (controller.getState() === 'PROJECT_DISCOVERY') {
     if (discovery.entryMode === 'RESUME_WORKFLOW') {
       const recovery = StateRecoveryService.recover(eventStore as any, workflowId);
       const validation = StateValidationService.validate(recovery, discovery.repositorySnapshot);
 
       controller.transition('STATE_RECOVERY', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'RESUME_WORKFLOW' } })
+        .then(() => controller.transition('STATE_VALIDATION', { actorType: 'SYSTEM', actorId: '0000' }))
         .then(() => {
           if (validation.status === 'MATCH') {
-            return controller.transition(recovery.canonicalState, { actorType: 'SYSTEM', actorId: '0000' });
+            return controller.transition(recovery.canonicalState, { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MATCH' } });
           } else {
             return controller.transition('REPOSITORY_CONFLICT', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MISMATCH' } });
           }
@@ -98,7 +112,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   });
 
-  // 2. Command: /hitm status
+  // 2. Command: /hitm-status
   pi.registerCommand('hitm-status', {
     description: 'Display current HITM state, mode, active agent, and test lock status',
     handler: async (_args: string, ctx: ExtensionContext) => {
@@ -147,19 +161,20 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   });
 
-  // 5. Command: /hitm-test (Consumes Authoritative Accepted TestSpecification & TestSuiteLock)
+  // 5. Command: /hitm-test (Consumes Real Dependency Lock and Accepted TestSpecification)
   pi.registerCommand('hitm-test', {
-    description: 'Trigger authoritative TestRunner consuming accepted TestSpecification and TestSuiteLock',
+    description: 'Trigger authoritative TestRunner consuming accepted TestSpecification and real lockfile',
     handler: async (_args: string, ctx: ExtensionContext) => {
       const testSpec = artifactStore.getLatestAccepted('TestSpecification');
       const lock = TestSuiteLock.loadLock();
-
       const expectedHash = lock?.testSuiteContentHash || (testSpec?.payload as any)?.testSuiteContentHash;
+
       if (!expectedHash) {
         ctx.ui.notify('Cannot run authoritative test: No accepted TestSpecification or TestSuiteLock found.', 'warning');
         return;
       }
 
+      const depLockHash = getRealDependencyLockHash();
       ctx.ui.notify(`Executing authoritative test suite against locked hash (${expectedHash.slice(0, 10)}...)...`, 'info');
       try {
         const freshSnap = gitRepo.getFreshSnapshot();
@@ -169,7 +184,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
           testSpecificationArtifactId: testSpec?.artifactId || 'art-locked',
           testSuiteContentHash: expectedHash,
           repositoryRevision: freshSnap.headSha,
-          dependencyLockHash: 'live-lock',
+          dependencyLockHash: depLockHash,
           executionCommand: 'npm test'
         });
 
@@ -184,12 +199,25 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   });
 
-  // 6. Command: /hitm-run (Closed-Loop Agent Invocation)
+  // 6. Command: /hitm-run (Closed-Loop Agent Invocation with Context Artifacts)
   pi.registerCommand('hitm-run', {
-    description: 'Dispatch the active agent through PiAgentRunner with layered governance prompt',
+    description: 'Dispatch the active agent through PiAgentRunner with layered governance prompt and context artifacts',
     handler: async (taskPrompt: string, ctx: ExtensionContext) => {
       const promptText = taskPrompt.trim() || `Perform bounded duty for state [${controller.getState()}]`;
-      ctx.ui.notify(`Invoking Agent ${activeAgentId} in role [${syncAgentToState(controller.getState())}]...`, 'info');
+      
+      // Bind relevant context artifacts to agent invocation (§61)
+      const contextArtifactIds: string[] = [];
+      const masterSpec = artifactStore.getLatestAccepted('MasterSpecification');
+      const sprintSpec = artifactStore.getLatestAccepted('SprintSpecification');
+      const testSpec = artifactStore.getLatestAccepted('TestSpecification');
+      const knowledge = artifactStore.getLatestAccepted('KnowledgeSnapshot');
+
+      if (masterSpec) contextArtifactIds.push(masterSpec.artifactId);
+      if (sprintSpec) contextArtifactIds.push(sprintSpec.artifactId);
+      if (testSpec) contextArtifactIds.push(testSpec.artifactId);
+      if (knowledge) contextArtifactIds.push(knowledge.artifactId);
+
+      ctx.ui.notify(`Invoking Agent ${activeAgentId} in role [${syncAgentToState(controller.getState())}] with ${contextArtifactIds.length} context artifact(s)...`, 'info');
 
       try {
         const execution = await agentRunner.start({
@@ -198,7 +226,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
           workflowId,
           taskId: `task-${controller.getState()}`,
           prompt: promptText,
-          contextArtifactIds: []
+          contextArtifactIds
         });
 
         ctx.ui.notify(`Agent ${activeAgentId} execution completed: ${execution.status}`, 'info');

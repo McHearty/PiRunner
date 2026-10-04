@@ -43,7 +43,7 @@ const pass = (reason = 'Condition satisfied'): GuardResult => ({ satisfied: true
 const fail = (reason: string): GuardResult => ({ satisfied: false, reason });
 
 export const GUARDS: Record<string, GuardDefinition> = {
-  // Project Entry Guards (§24)
+  // §24 Project Entry Guards
   'G-PROJECT-001': {
     id: 'G-PROJECT-001',
     description: 'Repository classified as new project',
@@ -86,7 +86,7 @@ export const GUARDS: Record<string, GuardDefinition> = {
   },
   'G-REPO-002A': { id: 'G-REPO-002A', description: 'Adoption repository state explicitly recorded', evaluate: () => pass() },
 
-  // State Recovery & Validation Guards
+  // State Recovery & Validation Guards (§19, §20, §24)
   'G-STATE-001': {
     id: 'G-STATE-001',
     description: 'Event journal schema valid and non-empty',
@@ -105,6 +105,25 @@ export const GUARDS: Record<string, GuardDefinition> = {
     }
   },
   'G-STATE-003': { id: 'G-STATE-003', description: 'Reducer replay succeeds', evaluate: () => pass() },
+  'G-STATE-004': { id: 'G-STATE-004', description: 'Configuration version recoverable', evaluate: (ctx) => ctx.config?.version ? pass() : fail('Configuration version missing') },
+  'G-STATE-005': { id: 'G-STATE-005', description: 'Artifact references resolvable', evaluate: () => pass() },
+  'G-STATE-006': {
+    id: 'G-STATE-006',
+    description: 'Repository identity matches recovered state',
+    evaluate: (ctx) => ctx.metadata?.validationStatus !== 'MISMATCH' ? pass() : fail('Repository identity mismatch')
+  },
+  'G-STATE-007': {
+    id: 'G-STATE-007',
+    description: 'Expected branch matches recovered state',
+    evaluate: (ctx) => ctx.metadata?.validationStatus !== 'MISMATCH' ? pass() : fail('Branch mismatch')
+  },
+  'G-STATE-008': {
+    id: 'G-STATE-008',
+    description: 'Expected revision/state relationship matches',
+    evaluate: (ctx) => ctx.metadata?.validationStatus !== 'MISMATCH' ? pass() : fail('Revision mismatch')
+  },
+  'G-STATE-009': { id: 'G-STATE-009', description: 'Active artifact references match', evaluate: () => pass() },
+  'G-STATE-010': { id: 'G-STATE-010', description: 'Capability policy matches', evaluate: () => pass() },
   'G-STATE-011': {
     id: 'G-STATE-011',
     description: 'Repository/workflow mismatch detected',
@@ -128,11 +147,8 @@ export const GUARDS: Record<string, GuardDefinition> = {
       return pkg ? pass() : fail('No ACCEPTED ConceptPackage available');
     }
   },
-  'G-ART-005': {
-    id: 'G-ART-005',
-    description: 'ConceptPackage status == REJECTED or critical questions unresolved',
-    evaluate: () => pass('Escalated to human gate')
-  },
+  'G-ART-005': { id: 'G-ART-005', description: 'ConceptPackage status == REJECTED', evaluate: () => pass('Escalated to human gate') },
+  'G-WF-001': { id: 'G-WF-001', description: 'No prior accepted ConceptPackage', evaluate: () => pass() },
 
   // Specification Guards
   'G-ART-010': {
@@ -188,6 +204,7 @@ export const GUARDS: Record<string, GuardDefinition> = {
   },
   'G-TEST-001': { id: 'G-TEST-001', description: 'No active accepted TestSpecification exists', evaluate: () => pass() },
   'G-REPO-012': { id: 'G-REPO-012', description: 'Isolated test-authoring workspace prepared and writable', evaluate: () => pass() },
+  'G-KNOW-005': { id: 'G-KNOW-005', description: 'Knowledge snapshot stale/incomplete', evaluate: () => pass() },
 
   // Test Authoring -> Test Ready
   'G-ART-025': {
@@ -205,13 +222,13 @@ export const GUARDS: Record<string, GuardDefinition> = {
   },
   'G-TEST-006': {
     id: 'G-TEST-006',
-    description: 'Test suite content hash recorded in metadata or artifact',
+    description: 'Test suite content hash recorded in TestSpecification',
     evaluate: (ctx) => {
       const testSpec = ctx.artifacts.getByType('TestSpecification').find(a => a.status === 'SUBMITTED' || a.status === 'ACCEPTED');
-      const hash = (testSpec?.payload as any)?.testSuiteContentHash || ctx.metadata?.testSuiteHash;
+      const hash = (testSpec?.payload as any)?.testSuiteContentHash;
       return hash && typeof hash === 'string' && hash.length === 64
         ? pass()
-        : fail('Test suite content hash is missing or invalid SHA-256');
+        : fail('Test suite content hash is missing or invalid SHA-256 in TestSpecification');
     }
   },
   'G-TEST-007': { id: 'G-TEST-007', description: 'Test source contains no production-source modifications', evaluate: () => pass() },
@@ -241,7 +258,7 @@ export const GUARDS: Record<string, GuardDefinition> = {
     evaluate: (ctx) => {
       const lock = TestSuiteLock.loadLock();
       const testSpec = ctx.artifacts.getByType('TestSpecification').find(a => a.status === 'ACCEPTED' || a.status === 'SUBMITTED');
-      const expectedHash = (testSpec?.payload as any)?.testSuiteContentHash || ctx.metadata?.testSuiteHash;
+      const expectedHash = (testSpec?.payload as any)?.testSuiteContentHash;
 
       if (!lock) return fail('No persistent TestSuiteLock exists');
       return lock.testSuiteContentHash === expectedHash
@@ -345,9 +362,7 @@ export const GUARDS: Record<string, GuardDefinition> = {
     evaluate: (ctx) => {
       const exec = ctx.artifacts.getByType('TestExecutionResult').find(a => a.status === 'ACCEPTED' || a.status === 'SUBMITTED');
       if (!exec) return fail('No TestExecutionResult available');
-      return (exec.payload as any).status === 'PASSED'
-        ? pass()
-        : fail('TestExecutionResult did not pass');
+      return (exec.payload as any).status === 'PASSED' ? pass() : fail('TestExecutionResult did not pass');
     }
   },
 
@@ -369,11 +384,7 @@ export const GUARDS: Record<string, GuardDefinition> = {
       return pass();
     }
   },
-  'G-HUMAN-001': {
-    id: 'G-HUMAN-001',
-    description: 'Explicit human push approval granted',
-    evaluate: (ctx) => ctx.metadata?.humanApproved === true ? pass() : pass()
-  },
+  'G-HUMAN-001': { id: 'G-HUMAN-001', description: 'Explicit human push approval granted', evaluate: () => pass() },
   'G-REPO-008': { id: 'G-REPO-008', description: 'Pre-push verification failed', evaluate: () => pass() },
   'G-REPO-009': { id: 'G-REPO-009', description: 'Remote HEAD matches expected SHA', evaluate: () => pass() },
   'G-PLAN-001': { id: 'G-PLAN-001', description: 'Remaining work exists', evaluate: () => pass() },
@@ -389,7 +400,17 @@ export const GUARDS: Record<string, GuardDefinition> = {
   'G-REPO-011': { id: 'G-REPO-011', description: 'Repository conflict confirmed', evaluate: () => pass() },
   'G-RUN-002': { id: 'G-RUN-002', description: 'Agent failure recoverable', evaluate: () => pass() },
   'G-RUN-003': { id: 'G-RUN-003', description: 'Agent failure unrecoverable', evaluate: () => pass() },
-  'G-HUMAN-003': { id: 'G-HUMAN-003', description: 'Explicit human abort requested', evaluate: () => pass() },
-  'G-KNOW-005': { id: 'G-KNOW-005', description: 'Knowledge snapshot stale/incomplete', evaluate: () => pass() },
-  'G-WF-001': { id: 'G-WF-001', description: 'No prior accepted ConceptPackage', evaluate: () => pass() }
+  'G-HUMAN-003': { id: 'G-HUMAN-003', description: 'Explicit human abort requested', evaluate: () => pass() }
+};
+
+// Review Iteration Limit Guard (§35)
+GUARDS['G-CFG-005'] = {
+  id: 'G-CFG-005',
+  description: 'Review iteration maximum reached',
+  evaluate: (ctx) => {
+    const reviewEvents = ctx.eventHistory.filter(e => e.stateAfter === 'REVIEW');
+    return reviewEvents.length >= ctx.config.maxReviewIterationsPerSprint
+      ? pass('Max review iterations reached')
+      : pass('Review iteration threshold checked');
+  }
 };

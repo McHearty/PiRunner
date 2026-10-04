@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { StoredArtifact } from '../artifacts/ArtifactStore.js';
 import { RepositorySnapshot } from '../workflow/Guards.js';
+import { GitRepository } from '../../infrastructure/git/GitRepository.js';
 
 export interface ProjectBaselinePayload {
   repositoryIdentity: string;
@@ -30,9 +31,8 @@ export class ProjectIntakeService {
     snapshot: RepositorySnapshot,
     workspaceRoot: string = process.cwd()
   ): StoredArtifact<ProjectBaselinePayload> {
-    const pkgPath = join(workspaceRoot, 'package.json');
-    let projectType = 'typescript';
-    let buildSystem: string | null = 'npm';
+    const gitRepo = new GitRepository(workspaceRoot);
+    const uncommittedChanges = gitRepo.getUncommittedFiles();
 
     let dependencyLockHash: string | null = null;
     const lockPath = join(workspaceRoot, 'package-lock.json');
@@ -49,8 +49,8 @@ export class ProjectIntakeService {
       baseRevision: snapshot.headSha,
       branch: snapshot.branch,
       workingTreeState: snapshot.isClean ? 'CLEAN' : 'DIRTY',
-      projectType,
-      buildSystem,
+      projectType: 'typescript',
+      buildSystem: 'npm',
       specificationRefs: [{ type: 'DOCUMENTATION', identifier: 'TECHSPEC.md' }],
       testRefs: [{ type: 'FILE', identifier: 'tests' }],
       documentationRefs: [{ type: 'FILE', identifier: 'README.md' }],
@@ -58,7 +58,7 @@ export class ProjectIntakeService {
       sourceInventory: [{ type: 'FILE', identifier: 'src' }],
       testInventory: [{ type: 'FILE', identifier: 'tests' }],
       existingCiConfiguration: [],
-      detectedUncommittedChanges: [],
+      detectedUncommittedChanges: uncommittedChanges,
       unresolvedProjectQuestions: [],
       intakeTimestamp: new Date().toISOString(),
       repositorySnapshotHash: snapshotHash

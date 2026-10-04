@@ -7,8 +7,10 @@ import { FakeTestRunner } from '../../../src/infrastructure/testing/FakeTestRunn
 import { FakeAgentRunner } from '../../../src/infrastructure/agents/FakeAgentRunner.js';
 import { ProjectDiscoveryService } from '../../../src/domain/project/ProjectDiscovery.js';
 import { ProjectIntakeService } from '../../../src/domain/project/ProjectIntake.js';
+import { StateRecoveryService } from '../../../src/domain/project/StateRecovery.js';
+import { StateValidationService } from '../../../src/domain/project/StateValidation.js';
 
-describe('Project Discovery, Adoption, and Resumption (Normative §5–§10, §19–§20)', () => {
+describe('Project Discovery, Adoption, and Canonical Resumption (Normative §5–§10, §18–§20)', () => {
   let validator: ArtifactValidator;
   let artifactStore: ArtifactStore;
   let eventStore: EventStore;
@@ -19,7 +21,7 @@ describe('Project Discovery, Adoption, and Resumption (Normative §5–§10, §1
     eventStore = new EventStore();
   });
 
-  it('classifies an existing Git repository with source files as ADOPT_EXISTING_PROJECT', () => {
+  it('classifies existing Git repo as ADOPT_EXISTING_PROJECT or RESUME_WORKFLOW', () => {
     const discovery = ProjectDiscoveryService.inspect(process.cwd());
     expect(['ADOPT_EXISTING_PROJECT', 'RESUME_WORKFLOW']).toContain(discovery.entryMode);
     expect(discovery.repositorySnapshot.branch).toBeDefined();
@@ -32,14 +34,14 @@ describe('Project Discovery, Adoption, and Resumption (Normative §5–§10, §1
 
     expect(baseline.artifactType).toBe('ProjectBaseline');
     expect(baseline.status).toBe('ACCEPTED');
+    expect(Array.isArray(baseline.payload.detectedUncommittedChanges)).toBe(true);
 
-    // Strict schema validation
     const validation = validator.validateArtifact(baseline);
     expect(validation.valid).toBe(true);
     expect(validation.errors).toHaveLength(0);
   });
 
-  it('executes adoption flow: PROJECT_DISCOVERY -> PROJECT_INTAKE -> PROJECT_BASELINE -> KNOWLEDGE_SYNC', async () => {
+  it('executes canonical adoption flow: DISCOVERY -> INTAKE -> BASELINE -> KNOWLEDGE_SYNC', async () => {
     const controller = new WorkflowController(
       'wf-adopt-flow',
       artifactStore,
@@ -51,27 +53,24 @@ describe('Project Discovery, Adoption, and Resumption (Normative §5–§10, §1
     );
     expect(controller.getState()).toBe('PROJECT_DISCOVERY');
 
-    // T-001A: Discovery -> Intake
     await controller.transition('PROJECT_INTAKE', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' } });
     expect(controller.getState()).toBe('PROJECT_INTAKE');
 
-    // Establish ProjectBaseline
     const snapshot = ProjectDiscoveryService.captureRepositorySnapshot(process.cwd());
     const baseline = ProjectIntakeService.createBaselineArtifact('wf-adopt-flow', snapshot, process.cwd());
     artifactStore.save(baseline);
 
-    // T-002A: Intake -> Baseline
     await controller.transition('PROJECT_BASELINE', { actorType: 'SYSTEM', actorId: '0000' });
     expect(controller.getState()).toBe('PROJECT_BASELINE');
 
-    // T-002B: Baseline -> Knowledge Sync
     await controller.transition('KNOWLEDGE_SYNC', { actorType: 'SYSTEM', actorId: '0000' });
     expect(controller.getState()).toBe('KNOWLEDGE_SYNC');
   });
 
-  it('recovers workflow state accurately across controller re-instantiation (Resumption §16, §19)', async () => {
+  it('executes canonical resumption pipeline on restart: DISCOVERY -> STATE_RECOVERY -> STATE_VALIDATION -> MATCH (§18, §19)', async () => {
+    // 1. Session 1: advances workflow to CONCEPT
     const controller1 = new WorkflowController(
-      'wf-resume-test',
+      'wf-restart-test',
       artifactStore,
       eventStore,
       new FakeTestRunner(),
@@ -83,16 +82,55 @@ describe('Project Discovery, Adoption, and Resumption (Normative §5–§10, §1
     await controller1.transition('CONCEPT', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'NEW_PROJECT' } });
     expect(controller1.getState()).toBe('CONCEPT');
 
-    // Simulate process restart: instantiate brand new controller sharing the same EventStore
+    // 2. Simulate process exit & restart: Controller 2 starts cleanly at PROJECT_DISCOVERY
     const controller2 = new WorkflowController(
-      'wf-resume-test',
+      'wf-restart-test',
       artifactStore,
       eventStore,
       new FakeTestRunner(),
-      new FakeAgentRunner()
+      new FakeAgentRunner(),
+      {},
+      'PROJECT_DISCOVERY'
+    );
+    expect(controller2.getState()).toBe('PROJECT_DISCOVERY');
+
+    // 3. Resumption Pipeline executes explicitly
+    const recovery = StateRecoveryService.recover(eventStore, 'wf-restart-test');
+    expect(recovery.recovered).toBe(true);
+    expect(recovery.canonicalState).toBe('CONCEPT');
+
+    await controller2.transition('STATE_RECOVERY', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'RESUME_WORKFLOW' } });
+    expect(controller2.getState()).toBe('STATE_RECOVERY');
+
+    await controller2.transition('STATE_VALIDATION', { actorType: 'SYSTEM', actorId: '0000' });
+    expect(controller2.getState()).toBe('STATE_VALIDATION');
+
+    // T-003B advances back to canonical recovered state
+    await controller2.transition(recovery.canonicalState, { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MATCH' } });
+    expect(controller2.getState()).toBe('CONCEPT');
+  });
+
+  it('routes to REPOSITORY_CONFLICT when resume validation detects a mismatch (§20, §24)', async () => {
+    const controller = new WorkflowController(
+      'wf-conflict-test',
+      artifactStore,
+      eventStore,
+      new FakeTestRunner(),
+      new FakeAgentRunner(),
+      {},
+      'PROJECT_DISCOVERY'
     );
 
-    // Reconstituted state matches previous state exactly
-    expect(controller2.getState()).toBe('CONCEPT');
+    // Initial event
+    await controller.transition('CONCEPT', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'NEW_PROJECT' } });
+
+    // New session enters recovery
+    const controller2 = new WorkflowController('wf-conflict-test', artifactStore, eventStore, new FakeTestRunner(), new FakeAgentRunner());
+    await controller2.transition('STATE_RECOVERY', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'RESUME_WORKFLOW' } });
+    await controller2.transition('STATE_VALIDATION', { actorType: 'SYSTEM', actorId: '0000' });
+
+    // T-003C: Validation reports MISMATCH -> freezes to REPOSITORY_CONFLICT
+    await controller2.transition('REPOSITORY_CONFLICT', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MISMATCH' } });
+    expect(controller2.getState()).toBe('REPOSITORY_CONFLICT');
   });
 });

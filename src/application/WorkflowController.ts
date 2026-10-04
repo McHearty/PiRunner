@@ -39,13 +39,8 @@ export class WorkflowController {
     this.workflowId = workflowId;
     this.config = { ...DEFAULT_WORKFLOW_CONFIG, ...config };
     this.gitRepo = new GitRepository(workspaceRoot);
-
-    const existingEvents = this.eventStore.getEvents(this.workflowId);
-    if (existingEvents.length > 0) {
-      this.currentState = reduceWorkflowEvents(existingEvents[0].stateBefore, existingEvents);
-    } else {
-      this.currentState = initialState;
-    }
+    // Explicit single entry point: Controller starts strictly at initialState (§5, §18)
+    this.currentState = initialState;
   }
 
   public getState(): WorkflowState {
@@ -82,7 +77,6 @@ export class WorkflowController {
       throw new Error(`Transition ${transitionDef.id} (${this.currentState} -> ${targetState}) mandates explicit human approval`);
     }
 
-    // Dynamic Repository Snapshot Freshness (§53)
     const freshRepoSnapshot = this.gitRepo.getFreshSnapshot();
     const effectiveRepo = this.repositorySnapshot || freshRepoSnapshot;
 
@@ -101,26 +95,34 @@ export class WorkflowController {
       metadata: options.metadata
     };
 
-    // Evaluate ALL Guards attached to transition
+    // FAIL CLOSED: Evaluate all guards; throw if guard or evaluator is missing (§21, §22)
     for (const guardDef of transitionDef.guards) {
       const activeGuard = GUARDS[guardDef.id];
-      if (activeGuard && activeGuard.evaluate) {
-        const result = activeGuard.evaluate(guardContext);
-        if (!result.satisfied) {
-          throw new GuardCheckError(guardDef.id, guardDef.description, result.reason);
-        }
+      if (!activeGuard || !activeGuard.evaluate) {
+        throw new GuardCheckError(guardDef.id, guardDef.description, 'Guard has no executable evaluator (fail-closed)');
+      }
+      const result = activeGuard.evaluate(guardContext);
+      if (!result.satisfied) {
+        throw new GuardCheckError(guardDef.id, guardDef.description, result.reason);
       }
     }
 
-    // Persist TestSuiteLock on TEST_READY transition (§30)
+    // Persist TestSuiteLock on TEST_READY derived strictly from accepted TestSpecification (§30)
     if (targetState === 'TEST_READY') {
-      const hash = (options.metadata?.testSuiteHash || '0'.repeat(64)) as string;
+      const testSpec = this.artifactStore.getLatestAccepted('TestSpecification');
+      const specPayload: any = testSpec?.payload;
+      const canonicalHash = specPayload?.testSuiteContentHash || options.metadata?.testSuiteHash;
+
+      if (!canonicalHash || canonicalHash.length !== 64) {
+        throw new Error('Cannot lock test suite: TestSpecification does not contain valid 64-char testSuiteContentHash');
+      }
+
       TestSuiteLock.createLock({
         workflowId: this.workflowId,
-        testSpecificationArtifactId: options.artifactIds?.[0] || 'art-test-spec',
-        testSuiteContentHash: hash,
+        testSpecificationArtifactId: testSpec?.artifactId || options.artifactIds?.[0] || 'art-test-spec',
+        testSuiteContentHash: canonicalHash,
         lockedAt: new Date().toISOString(),
-        fileCount: 1
+        fileCount: specPayload?.testCases?.length || 1
       });
     }
 
@@ -138,7 +140,7 @@ export class WorkflowController {
       metadata: options.metadata || {}
     };
 
-    // TRANSACTIONAL REORDERING: Append to journal FIRST; advance in-memory state ONLY on success (§15)
+    // Transactional append: write durable journal FIRST, update memory ONLY on success (§15)
     this.eventStore.append(event);
     this.currentState = applyWorkflowEvent(this.currentState, event);
 
