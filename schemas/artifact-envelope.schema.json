@@ -34,7 +34,8 @@
         "TestSpecification",
         "TestExecutionResult",
         "DailyDevlog",
-        "PublicationPackage"
+        "PublicationPackage",
+        "SkillPackage"
       ]
     },
     "schemaVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },

@@ -90,11 +90,15 @@ export const TRANSITION_REGISTRY: readonly TransitionDefinition[] = [
   { id: 'T-084', from: 'SPRINT_COMPLETE', to: 'SPRINT_READY', guards: [g('G-PLAN-001')], sideEffects: [{ id: 'SE-EVT-084', description: 'NEXT_SPRINT' }], humanApproval: 'NEVER' },
   { id: 'T-085', from: 'SPRINT_COMPLETE', to: 'DAY_COMPLETE', guards: [g('G-TIME-001')], sideEffects: [{ id: 'SE-EVT-085', description: 'DAY_BOUNDARY' }], humanApproval: 'NEVER' },
 
-  // §37 Diary and Publication
+  // §37 Diary, Skill Architect & Publication
   { id: 'T-090', from: 'DAY_COMPLETE', to: 'DIARY', guards: [g('G-EVT-001')], sideEffects: [{ id: 'SE-EVT-090', description: 'DIARY_STARTED' }], humanApproval: 'NEVER' },
   { id: 'T-091', from: 'DIARY', to: 'PUBLICATION_READY', guards: [g('G-ART-070')], sideEffects: [{ id: 'SE-EVT-091', description: 'DEVLOG_ACCEPTED' }], humanApproval: 'NEVER' },
   { id: 'T-092', from: 'DIARY', to: 'PUBLISHED', guards: [g('G-ART-071')], sideEffects: [{ id: 'SE-EVT-092', description: 'NO_PUB_REQUESTED' }], humanApproval: 'NEVER' },
   { id: 'T-093', from: 'PUBLICATION_READY', to: 'PUBLISHED', guards: [g('G-ART-072'), g('G-HUMAN-002')], sideEffects: [{ id: 'SE-EVT-093', description: 'PACKAGE_PUBLISHED' }], humanApproval: 'ALWAYS' },
+  { id: 'T-094', from: 'DIARY', to: 'SKILL_SYNTHESIS', guards: [g('G-EVT-001')], sideEffects: [{ id: 'SE-EVT-094', description: 'SKILL_SYNTHESIS_STARTED' }], humanApproval: 'NEVER' },
+  { id: 'T-095', from: 'SKILL_SYNTHESIS', to: 'PUBLICATION_READY', guards: [g('G-SKILL-001')], sideEffects: [{ id: 'SE-EVT-095', description: 'SKILL_ACCEPTED' }], humanApproval: 'ALWAYS' },
+  { id: 'T-096', from: 'PLANNING', to: 'SKILL_SYNTHESIS', guards: [g('G-ART-020')], sideEffects: [{ id: 'SE-EVT-096', description: 'DIRECT_SKILL_CURATION' }], humanApproval: 'ALWAYS' },
+  { id: 'T-097', from: 'SKILL_SYNTHESIS', to: 'PLANNING', guards: [g('G-SKILL-001')], sideEffects: [{ id: 'SE-EVT-097', description: 'RETURN_TO_PLANNING' }], humanApproval: 'NEVER' },
 
   // §38 Failure and Recovery
   { id: 'T-100', from: '*', to: 'ARTIFACT_INVALID', guards: [g('G-VAL-001')], sideEffects: [{ id: 'SE-EVT-100', description: 'VALIDATION_FAILED' }], humanApproval: 'NEVER' },

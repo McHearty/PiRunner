@@ -40,3 +40,54 @@ describe('Complete 12-Artifact Schema Validation (Normative §12)', () => {
     expect(validator.validatePayload('PublicationPackage', payload).valid).toBe(true);
   });
 });
+
+describe('SkillPackage Schema Validation (§37)', () => {
+  const validator = new ArtifactValidator();
+
+  it('validates a compliant SkillPackage satisfying the >=3 uses anti-proliferation rule', () => {
+    const payload = {
+      name: 'author-acceptance-tests',
+      version: '1.0.0',
+      targetRole: 'TEST_AUTHORING',
+      description: 'Derive executable tests from accepted contracts',
+      parameterizedInputs: [
+        { name: 'sprintSpecArtifactId', type: 'string', description: 'Artifact ID of accepted SprintSpecification' }
+      ],
+      procedure: [
+        'Read accepted specification',
+        'Extract acceptance criteria',
+        'Author tests under tests/**'
+      ],
+      successCriteria: [
+        'TestSuiteLock hash matches',
+        'All acceptance criteria have test dispositions'
+      ],
+      verifiedUses: [
+        'evt-sprint-1-tc1',
+        'evt-sprint-2-tc2',
+        'evt-sprint-3-tc3'
+      ]
+    };
+
+    const result = validator.validatePayload('SkillPackage', payload);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('rejects a SkillPackage with fewer than 3 verified uses (Anti-Proliferation Invariant)', () => {
+    const invalidPayload = {
+      name: 'unverified-skill',
+      version: '1.0.0',
+      targetRole: 'IMPLEMENTATION',
+      description: 'One-off procedure',
+      parameterizedInputs: [],
+      procedure: ['Do something'],
+      successCriteria: ['Done'],
+      verifiedUses: ['only-one-use'] // Violates minItems: 3
+    };
+
+    const result = validator.validatePayload('SkillPackage', invalidPayload);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('must NOT have fewer than 3 items'))).toBe(true);
+  });
+});

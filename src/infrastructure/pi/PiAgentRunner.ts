@@ -1,6 +1,6 @@
 import { AgentRunner, AgentInvocation, AgentExecution, AgentMessage, AgentEvent } from '../../domain/agents/AgentRunner.js';
 import { PathCapabilityEnforcer } from '../../domain/repository/PathCapability.js';
-import { AGENT_REGISTRY } from '../../agents/AgentDefinitions.js';
+import { AgentPromptFactory } from '../../agents/AgentPrompts.js';
 
 export interface PiSessionLike {
   prompt(text: string): Promise<void>;
@@ -29,30 +29,27 @@ export class PiAgentRunner implements AgentRunner {
     private readonly sessionFactory?: PiSessionFactory
   ) {}
 
-  public getInvocation(invocationId: string): AgentInvocation | undefined {
-    return this.activeInvocations.get(invocationId);
+  public getActiveInvocation(): AgentInvocation | undefined {
+    const entries = Array.from(this.activeInvocations.values());
+    return entries[entries.length - 1];
   }
 
-  // FAIL CLOSED: Invocation ID is mandatory. No global or latest-active fallback (§51, §52)
+  // Normalizes arguments across both direct args and Pi's event.input structure
   public authorizeToolCall(toolName: string, args: Record<string, unknown>, invocationId: string): boolean {
-    if (!invocationId) {
-      return false; // Fail closed: unidentifiable invocation
-    }
-
+    if (!invocationId) return false;
     const invocation = this.activeInvocations.get(invocationId);
-    if (!invocation) {
-      return false; // Fail closed: unresolvable or inactive invocation
-    }
+    if (!invocation) return false;
 
     const agentId = invocation.agentId;
+    const payload = (args?.input && typeof args.input === 'object' ? args.input : args) as Record<string, unknown>;
 
     if (toolName === 'write' || toolName === 'edit') {
-      const filePath = (args.path || args.filePath || '') as string;
+      const filePath = (payload.path || payload.filePath || '') as string;
       return PathCapabilityEnforcer.isWriteAllowed(agentId, filePath);
     }
 
     if (toolName === 'bash' || toolName === 'exec' || toolName === 'shell') {
-      const cmd = (args.command || args.cmd || '') as string;
+      const cmd = (payload.command || payload.cmd || '') as string;
       if (
         cmd.includes('git push') ||
         cmd.includes('git reset --hard') ||
@@ -68,8 +65,7 @@ export class PiAgentRunner implements AgentRunner {
   }
 
   public async start(invocation: AgentInvocation): Promise<AgentExecution> {
-    const agentSpec = AGENT_REGISTRY[invocation.agentId];
-    const systemPrompt = agentSpec ? agentSpec.systemPrompt : 'You are an autonomous engineering agent.';
+    const systemPrompt = AgentPromptFactory.createAgentSystemPrompt(invocation.agentId);
     let accumulatedOutput = '';
 
     const execution: AgentExecution = {
@@ -80,7 +76,6 @@ export class PiAgentRunner implements AgentRunner {
     this.eventQueues.set(invocation.invocationId, []);
     this.activeInvocations.set(invocation.invocationId, invocation);
 
-    // Strictly invocation-scoped toolInterceptor bound to invocation.invocationId (§51, §52)
     const toolInterceptor = async (toolName: string, args: Record<string, unknown>): Promise<boolean> => {
       const allowed = this.authorizeToolCall(toolName, args, invocation.invocationId);
       if (!allowed) {
@@ -135,7 +130,8 @@ export class PiAgentRunner implements AgentRunner {
               extensionFactories: [
                 (pi: any) => {
                   pi.on('tool_call', async (event: any) => {
-                    const allowed = await toolInterceptor(event.toolName, event.args);
+                    const args = event?.input || event?.args || {};
+                    const allowed = await toolInterceptor(event.toolName, args);
                     if (!allowed) {
                       throw new Error(`[PiRunner Sandboxing]: Action denied for Agent ${invocation.agentId}`);
                     }

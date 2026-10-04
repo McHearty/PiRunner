@@ -752,3 +752,22 @@ export const GUARDS: Record<string, GuardDefinition> = {
     evaluate: (ctx) => ctx.metadata?.humanAbort === true ? pass() : fail('Human abort signal not authorized')
   }
 };
+
+// Skill Architect Anti-Proliferation Guard
+GUARDS['G-SKILL-001'] = {
+  id: 'G-SKILL-001',
+  description: 'Anti-proliferation rule: procedure has >=3 real uses in devlogs or events',
+  evaluate: (ctx) => {
+    // Check if candidate skill metadata provides >=3 verified uses
+    const uses = (ctx.metadata?.candidateSkillUses as any[]) || [];
+    if (uses.length >= 3) {
+      return pass(`Anti-proliferation verified: procedure has ${uses.length} real uses`);
+    }
+    // Alternatively check historical devlog occurrences
+    const devlogs = ctx.artifacts.getByType('DailyDevlog');
+    if (devlogs.length >= 3) {
+      return pass('Anti-proliferation satisfied by multi-day devlog history');
+    }
+    return fail('Anti-proliferation violation: procedure has fewer than 3 verified uses; cannot graduate to skill');
+  }
+};

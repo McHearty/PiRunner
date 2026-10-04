@@ -5,29 +5,32 @@ import { ArtifactStore } from '../../../src/domain/artifacts/ArtifactStore.js';
 import { ArtifactValidator } from '../../../src/domain/artifacts/ArtifactValidator.js';
 
 describe('Layered Governance Sub-Prompts (§5, §6, §46-§48)', () => {
-  it('layers the base governance prompt and 0120 test-authoring invariants', () => {
-    const prompt0120 = AgentPromptFactory.createAgentSystemPrompt('0120');
+  it('layers the base governance prompt and test-authoring invariants', () => {
+    const prompt0120 = AgentPromptFactory.createAgentSystemPrompt('TEST_AUTHORING');
 
     expect(prompt0120).toContain('Inference Governance and Engineering Reasoning System Prompt');
     expect(prompt0120).toContain('Tier 1: Correctness & Epistemic Honesty');
     expect(prompt0120).toContain('Rolling Compaction Block');
-    expect(prompt0120).toContain('Methodical Scribe (0120) - Test Authoring Specialist');
+    expect(prompt0120).toContain('Agent Role: TEST_AUTHORING');
+    expect(prompt0120).toContain('ROLE CONTRACT: Test Authoring Specialist (Methodical Scribe)');
     expect(prompt0120).toContain('tests/**');
     expect(prompt0120).toContain('Never derive expected behavior from current implementation behavior');
   });
 
-  it('layers the base governance prompt and 0060 implementation invariants', () => {
-    const prompt0060 = AgentPromptFactory.createAgentSystemPrompt('0060');
+  it('layers the base governance prompt and implementation invariants', () => {
+    const prompt0060 = AgentPromptFactory.createAgentSystemPrompt('IMPLEMENTATION');
 
-    expect(prompt0060).toContain('Confident Forge (0060) - Implementation Specialist');
+    expect(prompt0060).toContain('Agent Role: IMPLEMENTATION');
+    expect(prompt0060).toContain('ROLE CONTRACT: Implementation Specialist (Confident Forge)');
     expect(prompt0060).toContain('src/**');
     expect(prompt0060).toContain('Authoritative tests are read-only');
   });
 
-  it('layers the base governance prompt and 0072 triage invariants', () => {
-    const prompt0072 = AgentPromptFactory.createAgentSystemPrompt('0072');
+  it('layers the base governance prompt and triage invariants', () => {
+    const prompt0072 = AgentPromptFactory.createAgentSystemPrompt('TRIAGE');
 
-    expect(prompt0072).toContain('Patient Oracle (0072) - Triage Specialist');
+    expect(prompt0072).toContain('Agent Role: TRIAGE');
+    expect(prompt0072).toContain('ROLE CONTRACT: Triage Specialist (Patient Oracle)');
     expect(prompt0072).toContain('Strictly READ-ONLY');
     expect(prompt0072).toContain('Triage diagnoses and routes but does not silently fix code');
   });

@@ -27,6 +27,7 @@ export type PrimaryWorkflowState =
   | 'SPRINT_COMPLETE'
   | 'DAY_COMPLETE'
   | 'DIARY'
+  | 'SKILL_SYNTHESIS'
   | 'PUBLICATION_READY'
   | 'PUBLISHED';
 

@@ -15,6 +15,7 @@ export * from './domain/testing/TestRunner.js';
 export * from './domain/testing/TestSuiteHasher.js';
 export * from './domain/testing/TestSuiteLock.js';
 export * from './domain/agents/AgentRunner.js';
+export * from './domain/agents/AgentIdentity.js';
 export * from './domain/repository/PathCapability.js';
 export * from './domain/repository/RepositoryPort.js';
 export * from './domain/knowledge/KnowledgeProvider.js';

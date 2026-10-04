@@ -18,6 +18,7 @@ import { StateValidationService } from './domain/project/StateValidation.js';
 import { TestSuiteLock } from './domain/testing/TestSuiteLock.js';
 import { ArtifactIngestionService } from './domain/artifacts/ArtifactIngestion.js';
 import { getAllowedTargetStates } from './domain/workflow/WorkflowTransition.js';
+import { AgentRosterService, CanonicalRole, AgentRosterEntry } from './domain/agents/AgentIdentity.js';
 
 export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   const root = process.cwd();
@@ -28,6 +29,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   const agentRunner = new PiAgentRunner(root);
   const gitRepo = new GitRepository(root);
 
+  let roster = AgentRosterService.getOrGenerateRoster(root);
   const workflowId = 'pirunner-canonical';
   const discovery = ProjectDiscoveryService.inspect(root);
 
@@ -43,25 +45,22 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     root
   );
 
-  function syncAgentToState(state: WorkflowState): string {
-    switch (state) {
-      case 'PROJECT_DISCOVERY':
-      case 'PROJECT_INTAKE':
-      case 'PROJECT_BASELINE':
-      case 'STATE_RECOVERY':
-      case 'STATE_VALIDATION': return '0000';
-      case 'CONCEPT': return '0012';
-      case 'SPECIFICATION': return '0024';
-      case 'PLANNING': return '0036';
-      case 'KNOWLEDGE_SYNC': return '0048';
-      case 'TEST_AUTHORING': return '0120';
-      case 'IMPLEMENTATION': return '0060';
-      case 'TRIAGE': return '0072';
-      case 'REVIEW': return '0084';
-      case 'DIARY': return '0096';
-      case 'PUBLICATION_READY': return '0108';
-      default: return '0000';
-    }
+  function getActiveAgentEntry(state: WorkflowState): AgentRosterEntry {
+    const roleMap: Record<string, CanonicalRole> = {
+      CONCEPT: 'CONCEPT',
+      SPECIFICATION: 'SPECIFICATION',
+      PLANNING: 'PLANNING',
+      KNOWLEDGE_SYNC: 'KNOWLEDGE',
+      TEST_AUTHORING: 'TEST_AUTHORING',
+      IMPLEMENTATION: 'IMPLEMENTATION',
+      TRIAGE: 'TRIAGE',
+      REVIEW: 'REVIEW',
+      DIARY: 'DEVLOG',
+      SKILL_SYNTHESIS: 'SKILL_ARCHITECT',
+      PUBLICATION_READY: 'PUBLICATION'
+    };
+    const canonicalRole = roleMap[state] || 'CONCEPT';
+    return roster[canonicalRole];
   }
 
   function getExpectedArtifactForState(state: WorkflowState): string | null {
@@ -75,6 +74,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
       case 'TRIAGE': return 'TriageReport';
       case 'REVIEW': return 'ReviewResult';
       case 'DIARY': return 'DailyDevlog';
+      case 'SKILL_SYNTHESIS': return 'SkillPackage';
       case 'PUBLICATION_READY': return 'PublicationPackage';
       default: return null;
     }
@@ -86,7 +86,17 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     if (state === 'PLANNING' && artifactType === 'SprintSpecification') return 'KNOWLEDGE_SYNC';
     if (state === 'TEST_AUTHORING' && artifactType === 'TestSpecification') return 'TEST_READY';
     if (state === 'IMPLEMENTATION' && artifactType === 'ImplementationResult') return 'COMMIT_CREATED';
+    if (state === 'SKILL_SYNTHESIS' && artifactType === 'SkillPackage') return 'PLANNING';
     return null;
+  }
+
+  function updateFooterStatus(ctx?: ExtensionContext) {
+    const state = controller.getState();
+    const agent = getActiveAgentEntry(state);
+    const badge = AgentRosterService.formatBadge(agent);
+    if (ctx && (ctx.ui as any)?.setStatus) {
+      (ctx.ui as any).setStatus('hitm-agent', badge);
+    }
   }
 
   function getRealDependencyLockHash(): string {
@@ -97,7 +107,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     return createHash('sha256').update('no-lockfile-available').digest('hex');
   }
 
-  // Canonical Startup Pipeline (§5, §18)
+  // Startup Pipeline
   if (controller.getState() === 'PROJECT_DISCOVERY') {
     if (discovery.entryMode === 'RESUME_WORKFLOW') {
       const recovery = StateRecoveryService.recover(eventStore as any, workflowId);
@@ -132,12 +142,82 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   }
 
-  // /hitm-status: shows current state and all allowed next states
+  // 1. Natural Chat Persona Chaining (§1, §46-§48): Returns { systemPrompt } per Pi Extension API specification
+  if (typeof (pi as any).on === 'function') {
+    (pi as any).on('before_agent_start', async (event: any, ctx: ExtensionContext) => {
+      updateFooterStatus(ctx);
+      const state = controller.getState();
+      const agent = getActiveAgentEntry(state);
+      const expectedType = getExpectedArtifactForState(state);
+
+      const prompt = AgentPromptFactory.createAgentSystemPrompt(agent.canonicalRole);
+      const instruction = expectedType
+        ? `\nActive Workflow State: [${state}]. Your current role: ${AgentRosterService.formatBadge(agent)}. Output must include valid JSON for ${expectedType}.`
+        : `\nActive Workflow State: [${state}]. Your current role: ${AgentRosterService.formatBadge(agent)}.`;
+
+      const base = event?.systemPrompt ? `${event.systemPrompt}\n` : '';
+      return {
+        systemPrompt: `${base}${prompt}${instruction}`
+      };
+    });
+
+    // 2. Natural Chat Turn-End Interception
+    (pi as any).on('turn_end', async (event: any, ctx: ExtensionContext) => {
+      updateFooterStatus(ctx);
+      const currentState = controller.getState();
+      const expectedType = getExpectedArtifactForState(currentState);
+      const agent = getActiveAgentEntry(currentState);
+
+      if (!expectedType) return;
+
+      const rawText = typeof event?.message?.content === 'string'
+        ? event.message.content
+        : Array.isArray(event?.message?.content)
+          ? event.message.content.map((b: any) => b.text || '').join('\n')
+          : '';
+
+      if (!rawText) return;
+
+      const ingestion = ArtifactIngestionService.ingestFromExecution(
+        { invocationId: `turn-${Date.now()}`, status: 'COMPLETED', rawOutput: rawText },
+        expectedType,
+        workflowId,
+        `task-${currentState}`,
+        agent.id,
+        validator,
+        artifactStore as any
+      );
+
+      if (ingestion.success && ingestion.artifact) {
+        const target = getTargetTransitionForArtifact(currentState, expectedType);
+        if (target) {
+          const confirmed = await ctx.ui.confirm(
+            'HITM Step Authorization',
+            `${AgentRosterService.formatBadge(agent)} completed ${expectedType}.\nAuthorize transition to [${target}]?`
+          );
+          if (confirmed) {
+            try {
+              await controller.transition(target, { actorType: 'AGENT', actorId: agent.id }, { artifactIds: [ingestion.artifact.artifactId] });
+              updateFooterStatus(ctx);
+              ctx.ui.notify(`State advanced to [${controller.getState()}]`, 'info');
+            } catch (err: any) {
+              ctx.ui.notify(`Transition rejected: ${err.message}`, 'error');
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // Interactive Commands
   pi.registerCommand('hitm-status', {
-    description: 'Display current state, mode, active agent, lock, and legal next transitions',
+    description: 'Display current state, active [ID NAME] agent, and legal next transitions',
     handler: async (_args: string, ctx: ExtensionContext) => {
       const state = controller.getState();
-      const currentAgent = syncAgentToState(state);
+      const agent = getActiveAgentEntry(state);
+      const badge = AgentRosterService.formatBadge(agent);
+      updateFooterStatus(ctx);
+
       const lock = TestSuiteLock.loadLock();
       const lockSummary = lock ? `Locked (${lock.testSuiteContentHash.slice(0, 8)})` : 'Unlocked';
       
@@ -146,7 +226,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
       );
 
       ctx.ui.notify(
-        `State: [${state}] | Mode: ${discovery.entryMode} | Agent: ${currentAgent} | TestLock: ${lockSummary}\n` +
+        `State: [${state}] | Active: ${badge} | TestLock: ${lockSummary}\n` +
         `Allowed Next Transitions: [${legalNext.join(', ')}]`,
         'info'
       );
@@ -156,13 +236,12 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   pi.registerCommand('hitm-prompt', {
     description: 'View layered governance sub-prompt for the active agent',
     handler: async (_args: string, ctx: ExtensionContext) => {
-      const currentAgent = syncAgentToState(controller.getState());
-      const prompt = AgentPromptFactory.createAgentSystemPrompt(currentAgent);
-      ctx.ui.notify(`Active Sub-Prompt Loaded for Agent ${currentAgent} (${prompt.length} chars)`, 'info');
+      const agent = getActiveAgentEntry(controller.getState());
+      const prompt = AgentPromptFactory.createAgentSystemPrompt(agent.canonicalRole);
+      ctx.ui.notify(`Active Sub-Prompt Loaded for ${AgentRosterService.formatBadge(agent)} (${prompt.length} chars)`, 'info');
     }
   });
 
-  // /hitm-approve: guides with legal states if omitted
   pi.registerCommand('hitm-approve', {
     description: 'Authorize and execute next state transition as Human Authority',
     handler: async (targetState: string, ctx: ExtensionContext) => {
@@ -193,7 +272,9 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
       if (confirmed) {
         try {
           await controller.transition(target, { actorType: 'HUMAN', actorId: 'lead-human' }, { humanApproved: true });
-          ctx.ui.notify(`State advanced to [${controller.getState()}]`, 'info');
+          updateFooterStatus(ctx);
+          const newAgent = getActiveAgentEntry(controller.getState());
+          ctx.ui.notify(`State advanced to [${controller.getState()}] | Active: ${AgentRosterService.formatBadge(newAgent)}`, 'info');
         } catch (err: any) {
           ctx.ui.notify(`Transition rejected: ${err.message}`, 'error');
         }
@@ -238,78 +319,19 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   });
 
-  // Closed-Loop: Invocation-Scoped Dispatch -> Artifact Extraction -> Transition (§1, §12, §52, §61)
-  pi.registerCommand('hitm-run', {
-    description: 'Dispatch active agent, ingest typed artifact, validate schema, and advance workflow',
-    handler: async (taskPrompt: string, ctx: ExtensionContext) => {
-      const currentState = controller.getState();
-      const executingAgentId = syncAgentToState(currentState);
-      const expectedType = getExpectedArtifactForState(currentState);
-      const promptText = taskPrompt.trim() || `Execute duties for state [${currentState}]. Output must include valid JSON for ${expectedType}.`;
-
-      const contextArtifactIds: string[] = [];
-      const masterSpec = artifactStore.getLatestAccepted('MasterSpecification');
-      const sprintSpec = artifactStore.getLatestAccepted('SprintSpecification');
-      const testSpec = artifactStore.getLatestAccepted('TestSpecification');
-      const knowledge = artifactStore.getLatestAccepted('KnowledgeSnapshot');
-
-      if (masterSpec) contextArtifactIds.push(masterSpec.artifactId);
-      if (sprintSpec) contextArtifactIds.push(sprintSpec.artifactId);
-      if (testSpec) contextArtifactIds.push(testSpec.artifactId);
-      if (knowledge) contextArtifactIds.push(knowledge.artifactId);
-
-      ctx.ui.notify(`Invoking Agent ${executingAgentId} in [${currentState}]...`, 'info');
-
-      try {
-        const execution = await agentRunner.start({
-          invocationId: `inv-${Date.now()}`,
-          agentId: executingAgentId,
-          workflowId,
-          taskId: `task-${currentState}`,
-          prompt: promptText,
-          contextArtifactIds
-        });
-
-        if (execution.status === 'FAILED') {
-          ctx.ui.notify(`Agent execution failed: ${execution.rawOutput}`, 'error');
-          await controller.transition('AGENT_FAILED', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { agentExecutionStatus: 'FAILED' } });
-          return;
-        }
-
-        if (expectedType) {
-          const ingestion = ArtifactIngestionService.ingestFromExecution(
-            execution,
-            expectedType,
-            workflowId,
-            `task-${currentState}`,
-            executingAgentId,
-            validator,
-            artifactStore as any
-          );
-
-          if (!ingestion.success) {
-            ctx.ui.notify(`Artifact ingestion failed: ${ingestion.errors.join(', ')}`, 'error');
-            await controller.transition('ARTIFACT_INVALID', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationFailed: true } });
-            return;
-          }
-
-          ctx.ui.notify(`Validated and persisted ${expectedType} [${ingestion.artifact?.artifactId}]`, 'info');
-
-          const targetTransition = getTargetTransitionForArtifact(currentState, expectedType);
-          if (targetTransition) {
-            try {
-              await controller.transition(targetTransition, { actorType: 'AGENT', actorId: executingAgentId }, { artifactIds: [ingestion.artifact!.artifactId] });
-              ctx.ui.notify(`Workflow advanced automatically to [${controller.getState()}]`, 'info');
-            } catch (transitionErr: any) {
-              ctx.ui.notify(`Transition guard failed: ${transitionErr.message}`, 'warning');
-            }
-          }
-        }
-
-        ctx.ui.notify(`Agent ${executingAgentId} loop completed successfully.`, 'info');
-      } catch (err: any) {
-        ctx.ui.notify(`Agent run exception: ${err.message}`, 'error');
+  pi.registerCommand('hitm-roster', {
+    description: 'View or regenerate the project agent roster',
+    handler: async (arg: string, ctx: ExtensionContext) => {
+      if (arg.trim() === 'regenerate') {
+        roster = AgentRosterService.generateProjectRoster();
+        ctx.ui.notify('Generated new randomized project roster (.hitm/agent-roster.json updated).', 'info');
+      } else {
+        const summary = Object.values(roster)
+          .map(r => `${AgentRosterService.formatBadge(r)}: ${r.roleDescription}`)
+          .join('\n');
+        ctx.ui.notify(`Project Roster:\n${summary}`, 'info');
       }
+      updateFooterStatus(ctx);
     }
   });
 }

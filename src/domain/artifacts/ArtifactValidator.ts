@@ -68,7 +68,8 @@ export class ArtifactValidator {
       DailyPlan: 'https://hitm.example/schemas/daily-plan.schema.json',
       SprintSpecification: 'https://hitm.example/schemas/sprint-specification.schema.json',
       DailyDevlog: 'https://hitm.example/schemas/daily-devlog.schema.json',
-      PublicationPackage: 'https://hitm.example/schemas/publication-package.schema.json'
+      PublicationPackage: 'https://hitm.example/schemas/publication-package.schema.json',
+      SkillPackage: 'https://hitm.example/schemas/skill-package.schema.json'
     };
 
     const schemaId = schemaMap[artifactType];

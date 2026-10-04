@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hitm.example/schemas/skill-package.schema.json",
+  "title": "SkillPackage",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "version",
+    "targetRole",
+    "description",
+    "parameterizedInputs",
+    "procedure",
+    "successCriteria",
+    "verifiedUses"
+  ],
+  "properties": {
+    "name": { "type": "string", "pattern": "^[a-z0-9\\-]+$" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "targetRole": {
+      "type": "string",
+      "enum": [
+        "CONCEPT",
+        "SPECIFICATION",
+        "PLANNING",
+        "KNOWLEDGE",
+        "TEST_AUTHORING",
+        "IMPLEMENTATION",
+        "TRIAGE",
+        "REVIEW",
+        "DEVLOG",
+        "SKILL_ARCHITECT",
+        "PUBLICATION"
+      ]
+    },
+    "description": { "type": "string", "minLength": 1 },
+    "parameterizedInputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type", "description"],
+        "properties": {
+          "name": { "type": "string" },
+          "type": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "procedure": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "successCriteria": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "verifiedUses": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 3
+    }
+  }
+}
