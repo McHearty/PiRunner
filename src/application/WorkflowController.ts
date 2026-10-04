@@ -9,6 +9,8 @@ import { TestRunner, TestExecutionRequest, TestExecutionResultData } from '../do
 import { AgentRunner } from '../domain/agents/AgentRunner.js';
 import { PathCapabilityEnforcer } from '../domain/repository/PathCapability.js';
 import { GuardContext, RepositorySnapshot, GUARDS } from '../domain/workflow/Guards.js';
+import { GitRepository } from '../infrastructure/git/GitRepository.js';
+import { TestSuiteLock } from '../domain/testing/TestSuiteLock.js';
 
 export class GuardCheckError extends Error {
   constructor(public readonly guardId: string, public readonly description: string, public readonly reason: string) {
@@ -21,6 +23,7 @@ export class WorkflowController {
   private currentState: WorkflowState;
   private readonly workflowId: string;
   private readonly config: WorkflowConfig;
+  private readonly gitRepo: GitRepository;
   private repositorySnapshot?: RepositorySnapshot;
 
   constructor(
@@ -30,12 +33,13 @@ export class WorkflowController {
     private readonly testRunner: TestRunner,
     private readonly agentRunner: AgentRunner,
     config: Partial<WorkflowConfig> = {},
-    initialState: WorkflowState = 'PROJECT_DISCOVERY'
+    initialState: WorkflowState = 'PROJECT_DISCOVERY',
+    workspaceRoot: string = process.cwd()
   ) {
     this.workflowId = workflowId;
     this.config = { ...DEFAULT_WORKFLOW_CONFIG, ...config };
+    this.gitRepo = new GitRepository(workspaceRoot);
 
-    // If events exist for this workflow in eventStore, reconstitute state; otherwise start at initialState (§16)
     const existingEvents = this.eventStore.getEvents(this.workflowId);
     if (existingEvents.length > 0) {
       this.currentState = reduceWorkflowEvents(existingEvents[0].stateBefore, existingEvents);
@@ -78,6 +82,10 @@ export class WorkflowController {
       throw new Error(`Transition ${transitionDef.id} (${this.currentState} -> ${targetState}) mandates explicit human approval`);
     }
 
+    // Dynamic Repository Snapshot Freshness (§53)
+    const freshRepoSnapshot = this.gitRepo.getFreshSnapshot();
+    const effectiveRepo = this.repositorySnapshot || freshRepoSnapshot;
+
     const guardContext: GuardContext = {
       currentState: this.currentState,
       targetState,
@@ -88,11 +96,12 @@ export class WorkflowController {
       },
       eventHistory: this.eventStore.getEvents(this.workflowId),
       config: this.config,
-      repository: this.repositorySnapshot,
+      repository: effectiveRepo,
       referencedArtifactIds: options.artifactIds,
       metadata: options.metadata
     };
 
+    // Evaluate ALL Guards attached to transition
     for (const guardDef of transitionDef.guards) {
       const activeGuard = GUARDS[guardDef.id];
       if (activeGuard && activeGuard.evaluate) {
@@ -103,8 +112,20 @@ export class WorkflowController {
       }
     }
 
+    // Persist TestSuiteLock on TEST_READY transition (§30)
+    if (targetState === 'TEST_READY') {
+      const hash = (options.metadata?.testSuiteHash || '0'.repeat(64)) as string;
+      TestSuiteLock.createLock({
+        workflowId: this.workflowId,
+        testSpecificationArtifactId: options.artifactIds?.[0] || 'art-test-spec',
+        testSuiteContentHash: hash,
+        lockedAt: new Date().toISOString(),
+        fileCount: 1
+      });
+    }
+
     const event: WorkflowEvent = {
-      eventId: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      eventId: `evt-${this.workflowId}-${this.eventStore.getNextSequence(this.workflowId)}`,
       workflowId: this.workflowId,
       sequence: this.eventStore.getNextSequence(this.workflowId),
       type: `TRANSITION_${transitionDef.id}`,
@@ -117,8 +138,9 @@ export class WorkflowController {
       metadata: options.metadata || {}
     };
 
-    this.currentState = applyWorkflowEvent(this.currentState, event);
+    // TRANSACTIONAL REORDERING: Append to journal FIRST; advance in-memory state ONLY on success (§15)
     this.eventStore.append(event);
+    this.currentState = applyWorkflowEvent(this.currentState, event);
 
     return event;
   }

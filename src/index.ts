@@ -12,12 +12,15 @@ export * from './domain/triage/FailureSignature.js';
 export * from './domain/triage/StuckDetector.js';
 export * from './domain/testing/TestRunner.js';
 export * from './domain/testing/TestSuiteHasher.js';
+export * from './domain/testing/TestSuiteLock.js';
 export * from './domain/agents/AgentRunner.js';
 export * from './domain/repository/PathCapability.js';
 export * from './domain/knowledge/KnowledgeProvider.js';
 
 export * from './domain/project/ProjectDiscovery.js';
 export * from './domain/project/ProjectIntake.js';
+export * from './domain/project/StateRecovery.js';
+export * from './domain/project/StateValidation.js';
 
 export * from './application/WorkflowController.js';
 
@@ -25,6 +28,7 @@ export * from './infrastructure/agents/FakeAgentRunner.js';
 export * from './infrastructure/testing/FakeTestRunner.js';
 export * from './infrastructure/testing/RealDeterministicTestRunner.js';
 export * from './infrastructure/pi/PiAgentRunner.js';
+export * from './infrastructure/git/GitRepository.js';
 export * from './infrastructure/knowledge/GitKnowledgeProvider.js';
 export * from './infrastructure/events/FileEventStore.js';
 export * from './infrastructure/artifacts/FileArtifactStore.js';

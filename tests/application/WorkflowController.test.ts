@@ -22,8 +22,16 @@ describe('MVP Acceptance Workflow (§43 Normative End-to-End with Guards)', () =
     eventStore = new EventStore();
     testRunner = new FakeTestRunner();
     agentRunner = new FakeAgentRunner();
+    
     // Explicitly initialize at CONCEPT for sprint acceptance testing
     controller = new WorkflowController('wf-mvp-1', artifactStore, eventStore, testRunner, agentRunner, {}, 'CONCEPT');
+    
+    // Inject clean isolated repository snapshot for hermetic test execution
+    controller.setRepositorySnapshot({
+      branch: 'main',
+      headSha: 'a1b2c3d4e5f6',
+      isClean: true
+    });
   });
 
   it('executes canonical workflow from Concept through Push Gate with exact capability, guard, and HITM enforcement', async () => {

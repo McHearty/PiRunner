@@ -44,4 +44,9 @@ export class FileArtifactStore {
     }
     return matches;
   }
+
+  public getLatestAccepted<T = any>(artifactType: string): StoredArtifact<T> | undefined {
+    const matching = this.getByType<T>(artifactType).filter(a => a.status === 'ACCEPTED');
+    return matching[matching.length - 1];
+  }
 }
