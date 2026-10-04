@@ -41,7 +41,7 @@ export class StateValidationService {
       reasons.push(`Working tree is dirty in state [${state}] where clean tree is mandatory`);
     }
 
-    // 2. Validate Live Test Suite against TestSuiteLock (§20, §30)
+    // 2. Fail-Closed Live Test Suite Verification (§20, §30) - NO FALLBACK TO ['tests']
     const testLockedStates: WorkflowState[] = [
       'TEST_READY',
       'IMPLEMENTATION',
@@ -51,32 +51,39 @@ export class StateValidationService {
     ];
 
     if (testLockedStates.includes(state)) {
-      const lock = TestSuiteLock.loadLock();
+      const lock = TestSuiteLock.loadLock(join(workspaceRoot, '.hitm'));
       if (!lock) {
         reasons.push(`Canonical state is [${state}] but no persistent TestSuiteLock exists`);
+      } else if (!artifactStore) {
+        reasons.push('ArtifactStore unavailable to resolve accepted TestSpecification during resume validation');
       } else {
-        // Gather live test files from disk and verify against lock (§30)
-        const roots = ['tests'];
-        if (artifactStore) {
-          const testSpec = artifactStore.getLatestAccepted('TestSpecification');
-          if (testSpec) {
-            const specRoots = (testSpec.payload as any)?.testRootPaths;
-            if (Array.isArray(specRoots) && specRoots.length > 0) roots.splice(0, roots.length, ...specRoots);
+        const testSpec = artifactStore.getLatestAccepted('TestSpecification');
+        if (!testSpec) {
+          reasons.push(`Cannot validate test suite on resume: No accepted TestSpecification found for state [${state}]`);
+        } else {
+          const specRoots = (testSpec.payload as any)?.testRootPaths;
+          if (!Array.isArray(specRoots) || specRoots.length === 0) {
+            reasons.push('Cannot validate test suite on resume: Accepted TestSpecification does not define valid testRootPaths');
+          } else {
             if ((testSpec.payload as any).testSuiteContentHash !== lock.testSuiteContentHash) {
               reasons.push('TestSuiteLock hash does not match accepted TestSpecification');
             }
+
+            const liveFiles = this.gatherFiles(specRoots, workspaceRoot);
+            if (liveFiles.length === 0) {
+              reasons.push(`No live test files found in declared testRootPaths: [${specRoots.join(', ')}]`);
+            } else {
+              const liveHash = TestSuiteHasher.hash({
+                testFramework: 'vitest',
+                executionCommand: 'npm test',
+                files: liveFiles
+              });
+
+              if (liveHash !== lock.testSuiteContentHash) {
+                reasons.push(`Live test files on disk do not match authoritative TestSuiteLock (live: ${liveHash}, locked: ${lock.testSuiteContentHash})`);
+              }
+            }
           }
-        }
-
-        const liveFiles = this.gatherFiles(roots, workspaceRoot);
-        const liveHash = TestSuiteHasher.hash({
-          testFramework: 'vitest',
-          executionCommand: 'npm test',
-          files: liveFiles
-        });
-
-        if (liveHash !== lock.testSuiteContentHash) {
-          reasons.push(`Live test files on disk do not match authoritative TestSuiteLock (live: ${liveHash}, locked: ${lock.testSuiteContentHash})`);
         }
       }
     }

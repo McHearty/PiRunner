@@ -1,4 +1,4 @@
-import { writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { TestSuiteHasher, TestFileEntry } from './TestSuiteHasher.js';
 
@@ -19,6 +19,9 @@ export class TestSuiteLock {
     data: TestSuiteLockData,
     storageDir: string = join(process.cwd(), '.hitm')
   ): void {
+    if (!existsSync(storageDir)) {
+      mkdirSync(storageDir, { recursive: true });
+    }
     const lockPath = this.getLockPath(storageDir);
     writeFileSync(lockPath, JSON.stringify(data, null, 2), 'utf8');
   }

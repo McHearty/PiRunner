@@ -1,7 +1,7 @@
 {
-  "workflowId": "wf-mvp-1",
-  "testSpecificationArtifactId": "art-test-spec",
-  "testSuiteContentHash": "1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff",
-  "lockedAt": "2026-10-04T13:39:32.119Z",
-  "fileCount": 1
+  "workflowId": "pirunner-canonical",
+  "testSpecificationArtifactId": "art-test-spec-canonical",
+  "testSuiteContentHash": "d4176a96a82e4b000056b704e9514c3b99037c6bd7d05405cf318671b416a997",
+  "lockedAt": "2026-10-04T13:51:48.332Z",
+  "fileCount": 15
 }

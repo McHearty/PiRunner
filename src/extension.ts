@@ -9,7 +9,6 @@ import { FileEventStore } from './infrastructure/events/FileEventStore.js';
 import { RealDeterministicTestRunner } from './infrastructure/testing/RealDeterministicTestRunner.js';
 import { PiAgentRunner } from './infrastructure/pi/PiAgentRunner.js';
 import { GitRepository } from './infrastructure/git/GitRepository.js';
-import { PathCapabilityEnforcer } from './domain/repository/PathCapability.js';
 import { AgentPromptFactory } from './agents/AgentPrompts.js';
 import { WorkflowState } from './domain/workflow/WorkflowState.js';
 import { ProjectDiscoveryService } from './domain/project/ProjectDiscovery.js';
@@ -18,7 +17,6 @@ import { StateRecoveryService } from './domain/project/StateRecovery.js';
 import { StateValidationService } from './domain/project/StateValidation.js';
 import { TestSuiteLock } from './domain/testing/TestSuiteLock.js';
 import { ArtifactIngestionService } from './domain/artifacts/ArtifactIngestion.js';
-import { AgentInvocation } from './domain/agents/AgentRunner.js';
 
 export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   const root = process.cwd();
@@ -43,8 +41,6 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     gitRepo,
     root
   );
-
-  let activeInvocation: AgentInvocation | null = null;
 
   function syncAgentToState(state: WorkflowState): string {
     switch (state) {
@@ -135,28 +131,11 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   }
 
-  // Invocation-Scoped Tool Authorization Hook (§51, §52)
+  // Unified Tool Authorization: Delegated to AgentRunner Authority (§51, §52)
   pi.on('tool_call', async (call) => {
-    const executingAgentId = activeInvocation ? activeInvocation.agentId : syncAgentToState(controller.getState());
-
-    if (call.toolName === 'write' || call.toolName === 'edit') {
-      const filePath = (call.args.path || call.args.filePath || '') as string;
-      const allowed = PathCapabilityEnforcer.isWriteAllowed(executingAgentId, filePath);
-      if (!allowed) {
-        throw new Error(`[HITM Boundary Violation]: Agent ${executingAgentId} is forbidden from writing to "${filePath}".`);
-      }
-    }
-    if (call.toolName === 'bash' || call.toolName === 'exec' || call.toolName === 'shell') {
-      const cmd = (call.args.command || call.args.cmd || '') as string;
-      if (
-        cmd.includes('git push') ||
-        cmd.includes('git reset --hard') ||
-        cmd.includes('git checkout -f') ||
-        cmd.includes('rm -rf src') ||
-        cmd.includes('rm -rf tests')
-      ) {
-        throw new Error(`[HITM Authority Violation]: Agent ${executingAgentId} forbidden from executing '${cmd}'.`);
-      }
+    const allowed = agentRunner.authorizeToolCall(call.toolName, call.args);
+    if (!allowed) {
+      throw new Error(`[HITM Capability Violation]: Tool execution '${call.toolName}' denied by active authority policy.`);
     }
   });
 
@@ -164,6 +143,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     description: 'Display current HITM state, mode, active agent, and test lock status',
     handler: async (_args: string, ctx: ExtensionContext) => {
       const state = controller.getState();
+      const activeInvocation = agentRunner.getActiveInvocation();
       const currentAgent = activeInvocation ? activeInvocation.agentId : syncAgentToState(state);
       const lock = TestSuiteLock.loadLock();
       const lockSummary = lock ? `Locked (${lock.testSuiteContentHash.slice(0, 8)})` : 'Unlocked';
@@ -177,6 +157,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   pi.registerCommand('hitm-prompt', {
     description: 'View layered governance sub-prompt for the active agent',
     handler: async (_args: string, ctx: ExtensionContext) => {
+      const activeInvocation = agentRunner.getActiveInvocation();
       const currentAgent = activeInvocation ? activeInvocation.agentId : syncAgentToState(controller.getState());
       const prompt = AgentPromptFactory.createAgentSystemPrompt(currentAgent);
       ctx.ui.notify(`Active Sub-Prompt Loaded for Agent ${currentAgent} (${prompt.length} chars)`, 'info');
@@ -263,20 +244,17 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
       if (testSpec) contextArtifactIds.push(testSpec.artifactId);
       if (knowledge) contextArtifactIds.push(knowledge.artifactId);
 
-      // Establish Invocation-Scoped Authority (§52)
-      activeInvocation = {
-        invocationId: `inv-${Date.now()}`,
-        agentId: executingAgentId,
-        workflowId,
-        taskId: `task-${currentState}`,
-        prompt: promptText,
-        contextArtifactIds
-      };
-
       ctx.ui.notify(`Invoking Agent ${executingAgentId} in [${currentState}]...`, 'info');
 
       try {
-        const execution = await agentRunner.start(activeInvocation);
+        const execution = await agentRunner.start({
+          invocationId: `inv-${Date.now()}`,
+          agentId: executingAgentId,
+          workflowId,
+          taskId: `task-${currentState}`,
+          prompt: promptText,
+          contextArtifactIds
+        });
 
         if (execution.status === 'FAILED') {
           ctx.ui.notify(`Agent execution failed: ${execution.rawOutput}`, 'error');
@@ -317,8 +295,6 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
         ctx.ui.notify(`Agent ${executingAgentId} loop completed successfully.`, 'info');
       } catch (err: any) {
         ctx.ui.notify(`Agent run exception: ${err.message}`, 'error');
-      } finally {
-        activeInvocation = null; // Release invocation authority
       }
     }
   });

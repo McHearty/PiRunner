@@ -28,8 +28,35 @@ export class PiAgentRunner implements AgentRunner {
     private readonly sessionFactory?: PiSessionFactory
   ) {}
 
-  public getActiveInvocation(invocationId: string): AgentInvocation | undefined {
-    return this.activeInvocations.get(invocationId);
+  public getActiveInvocation(): AgentInvocation | undefined {
+    // Return latest active invocation
+    const entries = Array.from(this.activeInvocations.values());
+    return entries[entries.length - 1];
+  }
+
+  public authorizeToolCall(toolName: string, args: Record<string, unknown>, invocationId?: string): boolean {
+    const invocation = invocationId ? this.activeInvocations.get(invocationId) : this.getActiveInvocation();
+    const agentId = invocation ? invocation.agentId : '0000';
+
+    if (toolName === 'write' || toolName === 'edit') {
+      const filePath = (args.path || args.filePath || '') as string;
+      return PathCapabilityEnforcer.isWriteAllowed(agentId, filePath);
+    }
+
+    if (toolName === 'bash' || toolName === 'exec' || toolName === 'shell') {
+      const cmd = (args.command || args.cmd || '') as string;
+      if (
+        cmd.includes('git push') ||
+        cmd.includes('git reset --hard') ||
+        cmd.includes('git checkout -f') ||
+        cmd.includes('rm -rf src') ||
+        cmd.includes('rm -rf tests')
+      ) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   public async start(invocation: AgentInvocation): Promise<AgentExecution> {
@@ -45,40 +72,17 @@ export class PiAgentRunner implements AgentRunner {
     this.eventQueues.set(invocation.invocationId, []);
     this.activeInvocations.set(invocation.invocationId, invocation);
 
-    // Invocation-Scoped Tool Interceptor (§51, §52)
     const toolInterceptor = async (toolName: string, args: Record<string, unknown>): Promise<boolean> => {
-      if (toolName === 'write' || toolName === 'edit') {
-        const filePath = (args.path || args.filePath || '') as string;
-        if (!PathCapabilityEnforcer.isWriteAllowed(invocation.agentId, filePath)) {
-          this.emitEvent(invocation.invocationId, {
-            invocationId: invocation.invocationId,
-            type: 'FAILED',
-            payload: { error: `Path capability violation: Agent ${invocation.agentId} cannot write to ${filePath}` },
-            timestamp: new Date().toISOString()
-          });
-          return false;
-        }
+      const allowed = this.authorizeToolCall(toolName, args, invocation.invocationId);
+      if (!allowed) {
+        this.emitEvent(invocation.invocationId, {
+          invocationId: invocation.invocationId,
+          type: 'FAILED',
+          payload: { error: `Capability violation: Agent ${invocation.agentId} denied for tool '${toolName}'` },
+          timestamp: new Date().toISOString()
+        });
+        return false;
       }
-
-      if (toolName === 'bash' || toolName === 'exec' || toolName === 'shell') {
-        const cmd = (args.command || args.cmd || '') as string;
-        if (
-          cmd.includes('git push') ||
-          cmd.includes('git reset --hard') ||
-          cmd.includes('git checkout -f') ||
-          cmd.includes('rm -rf src') ||
-          cmd.includes('rm -rf tests')
-        ) {
-          this.emitEvent(invocation.invocationId, {
-            invocationId: invocation.invocationId,
-            type: 'FAILED',
-            payload: { error: `Command violation: Agent ${invocation.agentId} forbidden from executing '${cmd}'` },
-            timestamp: new Date().toISOString()
-          });
-          return false;
-        }
-      }
-
       return true;
     };
 
@@ -114,13 +118,34 @@ export class PiAgentRunner implements AgentRunner {
       try {
         const piModule: any = await import('@earendil-works/pi-coding-agent');
         if (typeof piModule.createAgentSession === 'function') {
+          // Pass DefaultResourceLoader with toolInterceptor to real Pi session (§4.1)
+          let resourceLoader: any = undefined;
+          if (typeof piModule.DefaultResourceLoader === 'function') {
+            resourceLoader = new piModule.DefaultResourceLoader({
+              cwd: this.workspaceRoot,
+              extensionFactories: [
+                (pi: any) => {
+                  pi.on('tool_call', async (event: any) => {
+                    const allowed = await toolInterceptor(event.toolName, event.args);
+                    if (!allowed) {
+                      throw new Error(`[PiRunner Sandboxing]: Action denied for Agent ${invocation.agentId}`);
+                    }
+                  });
+                }
+              ]
+            });
+            if (typeof resourceLoader.reload === 'function') {
+              await resourceLoader.reload();
+            }
+          }
+
           const { session } = await piModule.createAgentSession({
             cwd: this.workspaceRoot,
-            systemPrompt
+            systemPrompt,
+            resourceLoader
           });
           this.activeSessions.set(invocation.invocationId, session);
 
-          // Wire verified Pi streaming events (§4.1)
           if (typeof session.subscribe === 'function') {
             session.subscribe((event: any) => {
               if (event.type === 'message_update' && event.assistantMessageEvent?.type === 'text_delta') {

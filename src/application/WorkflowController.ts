@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { WorkflowState } from '../domain/workflow/WorkflowState.js';
 import { WorkflowEvent } from '../domain/workflow/WorkflowEvent.js';
 import { WorkflowConfig, DEFAULT_WORKFLOW_CONFIG } from '../domain/workflow/WorkflowConfig.js';
@@ -25,6 +26,7 @@ export class WorkflowController {
   private readonly workflowId: string;
   private readonly config: WorkflowConfig;
   private readonly repository: RepositoryPort;
+  private readonly workspaceRoot: string;
   private repositorySnapshot?: RepositorySnapshot;
 
   constructor(
@@ -40,6 +42,7 @@ export class WorkflowController {
   ) {
     this.workflowId = workflowId;
     this.config = { ...DEFAULT_WORKFLOW_CONFIG, ...config };
+    this.workspaceRoot = workspaceRoot;
     this.repository = repository || new GitRepository(workspaceRoot);
     this.currentState = initialState;
   }
@@ -81,7 +84,6 @@ export class WorkflowController {
     const freshRepoSnapshot = this.repository.getFreshSnapshot();
     const effectiveRepo = this.repositorySnapshot || freshRepoSnapshot;
 
-    // Build GuardContext merging humanApproved into metadata for guard evaluation
     const guardContext: GuardContext = {
       currentState: this.currentState,
       targetState,
@@ -93,7 +95,7 @@ export class WorkflowController {
       eventHistory: this.eventStore.getEvents(this.workflowId),
       config: this.config,
       repository: effectiveRepo,
-      referencedArtifactIds: options.artifactIds,
+      referencedArtifactIds: options.artifactIds,      workspaceRoot: this.workspaceRoot,
       metadata: {
         ...options.metadata,
         humanApproved: options.humanApproved === true
@@ -122,13 +124,17 @@ export class WorkflowController {
         throw new Error('Cannot lock test suite: TestSpecification does not contain valid 64-char testSuiteContentHash');
       }
 
-      TestSuiteLock.createLock({
-        workflowId: this.workflowId,
-        testSpecificationArtifactId: testSpec?.artifactId || options.artifactIds?.[0] || 'art-test-spec',
-        testSuiteContentHash: canonicalHash,
-        lockedAt: new Date().toISOString(),
-        fileCount: specPayload?.testCases?.length || 1
-      });
+      // Write lock into the controller workspace's .hitm directory
+      TestSuiteLock.createLock(
+        {
+          workflowId: this.workflowId,
+          testSpecificationArtifactId: testSpec?.artifactId || options.artifactIds?.[0] || 'art-test-spec',
+          testSuiteContentHash: canonicalHash,
+          lockedAt: new Date().toISOString(),
+          fileCount: specPayload?.testCases?.length || 1
+        },
+        join(this.workspaceRoot, '.hitm')
+      );
     }
 
     const event: WorkflowEvent = {
@@ -145,7 +151,7 @@ export class WorkflowController {
       metadata: options.metadata || {}
     };
 
-    // TRANSACTIONAL COMMIT BOUNDARY: append to journal FIRST; advance memory ONLY on success
+    // Transactional append: write durable journal FIRST, update memory ONLY on success
     this.eventStore.append(event);
     this.currentState = applyWorkflowEvent(this.currentState, event);
 

@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { WorkflowState } from './WorkflowState.js';
 import { WorkflowEvent } from './WorkflowEvent.js';
 import { WorkflowConfig } from './WorkflowConfig.js';
@@ -23,7 +24,7 @@ export interface GuardContext {
   eventHistory: readonly WorkflowEvent[];
   config: WorkflowConfig;
   repository?: RepositorySnapshot;
-  referencedArtifactIds?: string[];
+  referencedArtifactIds?: string[];  workspaceRoot?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -428,7 +429,7 @@ export const GUARDS: Record<string, GuardDefinition> = {
     id: 'G-TEST-012',
     description: 'Authoritative test-suite content hash matches locked specification',
     evaluate: (ctx) => {
-      const lock = TestSuiteLock.loadLock();
+      const lockDir = ctx.workspaceRoot ? join(ctx.workspaceRoot, '.hitm') : undefined;      const lock = TestSuiteLock.loadLock(lockDir);
       const testSpec = ctx.artifacts.getByType('TestSpecification').find(a => a.status === 'ACCEPTED' || a.status === 'SUBMITTED');
       const expectedHash = (testSpec?.payload as any)?.testSuiteContentHash;
 
