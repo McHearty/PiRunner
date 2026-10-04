@@ -54,6 +54,7 @@ The system is explicitly **not** an autonomous software-development swarm. Human
                               │
                               ▼
                      HITM Gate (Lead Human)
+```
 
 Agent Topology
 
