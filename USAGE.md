@@ -1,267 +1,245 @@
-
-# PiRunner Workflow & Operational Guide
+# PiRunner Operational & Developer Guide
 ## Native Pi Agent Harness Extension (TECHSPEC v1.3.0)
 
-This guide documents the complete operational lifecycle of **PiRunner** within the **Pi Coding Agent Harness**. It explains how human engineers and specialized agents collaborate through deterministic state transitions, strict capability sandboxing, and authoritative test locking.
+This guide documents the day-to-day operation of **PiRunner** within the **Pi Coding Agent Harness**. It covers installation, local model configuration, natural conversational turns, automated modal prompts, bundled skills, and recovery workflows.
 
 ---
 
-## Table of Contents
+## 1. Setup & Installation
 
-1. [Installation & Launch](#1-installation--launch)
-2. [Project Entry: Discovery, Adoption & Resumption](#2-project-entry-discovery-adoption--resumption)
-3. [The End-to-End Sprint Workflow](#3-the-end-to-end-sprint-workflow)
-   - [Phase 1: Planning (Agent 0036)](#phase-1-planning-curious-automaton)
-   - [Phase 2: Knowledge Synchronization (Agent 0048)](#phase-2-knowledge-synchronization-joyful-graph)
-   - [Phase 3: Test Authoring & Suite Locking (Agent 0120)](#phase-3-test-authoring--suite-locking-methodical-scribe)
-   - [Phase 4: Implementation (Agent 0060)](#phase-4-implementation-confident-forge)
-   - [Phase 5: Review (Agent 0084)](#phase-5-review-satisfied-sentinel)
-   - [Phase 6: Push Gate & Publication (Human Authority)](#phase-6-push-gate--publication-human-authority)
-4. [Triage & Recovery (Agent 0072)](#4-triage--recovery-patient-oracle)
-5. [Process Restart & Safe Resumption](#5-process-restart--safe-resumption)
-6. [Commands Quick Reference](#6-commands-quick-reference)
-
----
-
-## 1. Installation & Launch
-
-### Step 1: Build the Extension
+### Step 1: Compile the Extension
 ```bash
 npm run build && npm test
 ```
 
-### Step 2: Deploy to Pi Extensions Directory
+### Step 2: Deploy to the Extension Directory
 ```bash
 mkdir -p .pi/agent/extensions
 cp dist/extension.js .pi/agent/extensions/hitm.js
 ```
 
-### Step 3: Launch Pi
-Start Pi in your repository with your model configuration (cloud or local):
+### Step 3: Configure Your Local Model Endpoint
+Pi connects to local OpenAI-compatible inference servers (Ollama, llama.cpp, vLLM, LM Studio, etc.). 
+
+Configure your local model in Pi's settings or pass the model name directly on launch:
 ```bash
-# Example with a local model endpoint:
-pi --model <local-model-name>
+# Example launching with a local model:
+pi --model qwen2.5-coder:32b
 ```
 
 ---
 
-## 2. Project Entry: Discovery, Adoption & Resumption
+## 2. Interactive Conversational Workflow
 
-When Pi starts up, PiRunner's `ProjectDiscoveryService` automatically inspects the workspace before any prompt is processed:
+PiRunner does not require you to type bulky execution wrappers. You interact with Pi through **natural chat in the terminal**.
 
 ```text
-                       PROJECT_DISCOVERY
-                              │
-             ┌────────────────┼────────────────┐
-             │                │                │
-             ▼                ▼                ▼
-       NEW_PROJECT     ADOPT_EXISTING    RESUME_WORKFLOW
-             │                │                │
-             ▼                ▼                ▼
-          CONCEPT       PROJECT_INTAKE   STATE_RECOVERY
-                              │                │
-                              ▼                ▼
-                       PROJECT_BASELINE  STATE_VALIDATION
-                              │                │
-                              ▼                ├─ MATCH ──► [Recovered State]
-                        KNOWLEDGE_SYNC         │
-                              │                └─ MISMATCH ► REPOSITORY_CONFLICT
-                              ▼
-                           PLANNING
+Developer prompts naturally in Pi terminal
+                    │
+                    ▼
+pi.on('before_agent_start')
+  └── Injects active agent's governance prompt + context artifacts
+                    │
+                    ▼
+Model streams response & executes permitted tools
+                    │
+                    ▼
+pi.on('turn_end')
+  ├── Ingests JSON artifact block from model turn
+  ├── Validates schema via strict Draft 2020-12 AJV
+  └── Displays interactive confirmation dialog:
+      "? [4819 Resolute Scribe] completed TestSpecification.
+         Authorize transition to [TEST_READY]? (y/N)"
+                    │
+                    ▼
+State advances deterministically
 ```
 
-### Automatic Adoption Flow
-If starting in an existing repository with code but no previous `.hitm/events.jsonl`, PiRunner automatically executes:
-1. `PROJECT_DISCOVERY → PROJECT_INTAKE`: Inspects manifests, git history, and uncommitted files.
-2. `PROJECT_INTAKE → PROJECT_BASELINE`: Generates and validates a typed `ProjectBaseline` artifact capturing historical state without claiming retroactive ownership.
-3. `PROJECT_BASELINE → KNOWLEDGE_SYNC → PLANNING`: Advances the workflow to `PLANNING`, ready for sprint decomposition.
+### Footer Status Indicator
+The active agent badge is permanently visible in your terminal footer via Pi's UI status line:
+```text
+[4819 Methodical Scribe]
+```
 
-Check the initial state in Pi:
+---
+
+## 3. End-to-End Sprint Walkthrough
+
+---
+
+### Step 1: Automatic Project Discovery & Intake
+When you launch Pi in a repository, PiRunner automatically inspects the environment:
+1. Detects Git revision, branch, and uncommitted files.
+2. Generates an accepted `ProjectBaseline` artifact without claiming historical ownership.
+3. Advances: `PROJECT_DISCOVERY → PROJECT_INTAKE → PROJECT_BASELINE → KNOWLEDGE_SYNC → PLANNING`.
+
+Verify current status:
 ```text
 /hitm-status
 ```
-*Expected output:*
+*Output:*
 ```text
-State: [PLANNING] | Mode: ADOPT_EXISTING_PROJECT | Agent: 0036 | TestLock: Unlocked
-Allowed Next Transitions: [KNOWLEDGE_SYNC]
+State: [PLANNING] | Mode: ADOPT_EXISTING_PROJECT | Agent: [3812 Curious Automaton] | TestLock: Unlocked
+Allowed Next Transitions: [KNOWLEDGE_SYNC, SKILL_SYNTHESIS]
 ```
 
 ---
 
-## 3. The End-to-End Sprint Workflow
+### Step 2: Sprint Planning (`PLANNING`)
+**Active Agent:** `Curious Automaton` (Planning Specialist)  
+**Permitted Writes:** None (strictly read-only). Produces typed JSON artifacts.
 
-### Phase 1: Planning (Curious Automaton — `0036`)
-
-**Goal:** Decompose requirements into an accepted `DailyPlan` and `SprintSpecification`.
-
-1. **Verify Active Prompt:**
-   ```text
-   /hitm-prompt
-   ```
-   *(Confirms Agent 0036's planning persona and governance invariants).*
-
-2. **Execute Agent Planning:**
-   ```text
-   /hitm-run Decompose the current sprint objectives into a SprintSpecification for feature authentication
-   ```
-   - Agent `0036` generates a JSON payload conforming to `sprint-specification.schema.json`.
-   - `ArtifactIngestionService` validates the schema and commits the artifact to `.hitm/artifacts/`.
-   - PiRunner automatically triggers `T-030` (`PLANNING → KNOWLEDGE_SYNC`).
+Prompt Pi naturally:
+```text
+Let's plan sprint 1 for user authentication. Decompose the requirements into tasks and acceptance criteria.
+```
+- The model outputs a `SprintSpecification` JSON block.
+- PiRunner validates the schema, persists it to `.hitm/artifacts/`, and pops a confirmation dialog:
+  ```text
+  ? [3812 Curious Automaton] completed SprintSpecification.
+    Authorize transition to [KNOWLEDGE_SYNC]? (y/N)
+  ```
+- Press **Enter** to approve. State advances to `KNOWLEDGE_SYNC`.
 
 ---
 
-### Phase 2: Knowledge Synchronization (Joyful Graph — `0048`)
+### Step 3: Knowledge Synchronization (`KNOWLEDGE_SYNC`)
+**Active Agent:** `Joyful Graph` (Knowledge Specialist)
 
-**Goal:** Compute live dependency lockfile hashes and map source files to produce `KnowledgeSnapshot`.
-
-1. **Execute Knowledge Sync:**
-   ```text
-   /hitm-run Inspect package-lock.json and active source files to generate a KnowledgeSnapshot
-   ```
-   - Ingests `KnowledgeSnapshot` and validates lockfile hash.
-   - Automatically advances `KNOWLEDGE_SYNC → SPRINT_READY` (`T-031`).
-
-2. **Check Status:**
-   ```text
-   /hitm-status
-   ```
-   *Output shows:* `State: [SPRINT_READY] | Allowed Next Transitions: [TEST_AUTHORING]`
+Prompt Pi:
+```text
+Audit package-lock.json and active source files to generate the KnowledgeSnapshot.
+```
+- Ingests `KnowledgeSnapshot` with the live dependency lockfile SHA-256 hash.
+- Automatically advances to `SPRINT_READY`.
 
 ---
 
-### Phase 3: Test Authoring & Suite Locking (Methodical Scribe — `0120`)
+### Step 4: Test Authoring & Suite Locking (`TEST_AUTHORING → TEST_READY`)
+**Active Agent:** `Methodical Scribe` (Test Authoring Specialist)  
+**Permitted Writes:** `tests/**`, `fixtures/**`, `test-config/**`.  
+**Forbidden Writes:** `src/**` (attempted writes are blocked by `PathCapabilityEnforcer`).
 
-**Goal:** Derive executable acceptance tests from accepted specifications *before* any implementation begins.
-
-1. **Authorize Transition to Test Authoring:**
+1. Advance to test authoring:
    ```text
    /hitm-approve TEST_AUTHORING
    ```
-   - State becomes `TEST_AUTHORING`.
-   - Active agent switches to `0120 Methodical Scribe`.
-   - **Capability Policy:** `0120` is permitted to write to `tests/**`, `fixtures/**`. Writes to `src/**` are **strictly blocked**.
-
-2. **Execute Test Authoring:**
+2. Prompt Pi to author acceptance tests:
    ```text
-   /hitm-run Write unit tests for requirement REQ-001 in tests/unit/auth.test.ts and output TestSpecification
+   Derive acceptance tests for requirement REQ-001 in tests/unit/auth.test.ts and output the TestSpecification.
    ```
-   - Agent `0120` writes tests into `tests/unit/`.
-   - Emits a JSON `TestSpecification` declaring `testRootPaths: ["tests"]`.
-   - `ArtifactIngestionService` validates coverage and test cases.
-
-3. **Automatic Freezing & Test Locking:**
-   - PiRunner advances `TEST_AUTHORING → TEST_READY` (`T-041`).
-   - The authoritative test suite is canonically hashed (SHA-256) and locked into `.hitm/test-suite.lock.json`.
-   - Test files are now **immutable**.
+   - Agent writes test code to `tests/unit/auth.test.ts`.
+   - Emits a JSON `TestSpecification` with `testRootPaths: ["tests"]`.
+3. Modal confirmation appears:
+   ```text
+   ? [4819 Methodical Scribe] completed TestSpecification.
+     Authorize transition to [TEST_READY]? (y/N)
+   ```
+4. Confirming freezes the suite:
+   - The test files on disk are canonically hashed with `TestSuiteHasher`.
+   - The lock is committed to `.hitm/test-suite.lock.json`.
+   - Authoritative tests are now **immutable**.
 
 ---
 
-### Phase 4: Implementation (Confident Forge — `0060`)
+### Step 5: Implementation & Testing (`IMPLEMENTATION`)
+**Active Agent:** `Confident Forge` (Implementation Specialist)  
+**Permitted Writes:** `src/**`, `production-config/**`.  
+**Forbidden Writes:** `tests/**` (attempted edits to tests are blocked).
 
-**Goal:** Implement production source in `src/**` to satisfy the locked test suite without touching tests.
-
-1. **Authorize Transition to Implementation:**
+1. Advance to implementation:
    ```text
    /hitm-approve IMPLEMENTATION
    ```
-   - State becomes `IMPLEMENTATION`.
-   - Active agent switches to `0060 Confident Forge`.
-   - **Capability Policy:** `0060` can write to `src/**`. Attempts to modify `tests/**` are **strictly blocked**.
-
-2. **Execute Implementation:**
+2. Prompt Pi to implement the logic:
    ```text
-   /hitm-run Implement the auth token verification logic in src/auth.ts to pass the locked test suite
+   Implement the auth token verification in src/auth.ts to pass the locked test suite.
    ```
-   - Agent writes production code into `src/`.
-
-3. **Run Authoritative Deterministic Tests:**
-   At any point during implementation, verify code against the locked suite:
+3. Run authoritative deterministic tests at any time:
    ```text
    /hitm-test
    ```
-   - PiRunner retrieves the locked hash from `.hitm/test-suite.lock.json` and executes `npm test` in an isolated subprocess.
-   - Proves whether tests pass without relying on LLM claims.
-
-4. **Complete Implementation & Create Commit:**
+   - Executes `npm test` in an isolated subprocess against the locked test hash.
+   - Reports exact passed/failed counts.
+4. When passing, prompt Pi to finalize:
    ```text
-   /hitm-run Produce git commit and emit ImplementationResult with status COMPLETED
+   Create a commit for the implementation and emit the completed ImplementationResult.
    ```
-   - Validates `commitSha`, changed files, and execution evidence.
-   - Advances `IMPLEMENTATION → COMMIT_CREATED` (`T-051`).
+5. Confirm transition to `COMMIT_CREATED`.
 
 ---
 
-### Phase 5: Review (Satisfied Sentinel — `0084`)
+### Step 6: Review (`REVIEW`)
+**Active Agent:** `Satisfied Sentinel` (Review Specialist)  
+**Permitted Writes:** None (strictly read-only).
 
-**Goal:** Evaluate implementation and test execution evidence against the accepted specification.
-
-1. **Authorize Review Transition:**
+1. Advance to review:
    ```text
    /hitm-approve REVIEW
    ```
-   - State becomes `REVIEW`.
-   - Active agent switches to `0084 Satisfied Sentinel` (strictly read-only).
-
-2. **Execute Review:**
+2. Prompt Pi:
    ```text
-   /hitm-run Evaluate implementation commit and test execution results against acceptance criteria
+   Evaluate the implementation commit and test execution results against our acceptance criteria.
    ```
-   - Agent `0084` produces a `ReviewResult`.
-   - If status is `PASS` with zero blocking findings:
-     - Automatically advances `REVIEW → SPRINT_ACCEPTED` (`T-071`).
-   - If status is `FAIL`:
-     - Routes to `REWORK` (`T-072`) to allow another implementation pass.
+3. If review status is `PASS` with zero blocking findings:
+   - Prompts to advance to `SPRINT_ACCEPTED`.
+4. If review status is `FAIL`:
+   - Prompts to advance to `REWORK`, returning to `IMPLEMENTATION` for another pass.
 
 ---
 
-### Phase 6: Push Gate & Publication (Human Authority)
+### Step 7: Push Gate & Remote Publication (`PUSH_GATE`)
+Irreversible remote publication requires explicit human authority.
 
-**Goal:** Lead engineer authorizes irreversible remote repository publication.
-
-1. **Enter Push Gate:**
+1. Advance to push gate:
    ```text
    /hitm-approve PUSH_GATE
    ```
-   - State becomes `PUSH_GATE`.
-   - All automated agent mutations are frozen.
-
-2. **Authorize Remote Publication:**
+2. Authorize publication:
    ```text
    /hitm-approve REMOTE_PUBLISHED
    ```
-   - Pi prompts with a native interactive confirmation dialog:
+   - Prompts with a native confirmation dialog:
      `? Authorize transition from [PUSH_GATE] to [REMOTE_PUBLISHED]?`
-   - Pre-push verification runs (`git status` clean check, branch check).
-   - Remote publication occurs.
-   - Workflow advances to `SPRINT_COMPLETE → DAY_COMPLETE → DIARY`.
+   - Pre-push verification confirms clean working tree and expected commit SHA.
+   - Pushes to remote repository and advances to `SPRINT_COMPLETE`.
 
 ---
 
-## 4. Triage & Recovery (Patient Oracle — `0072`)
+## 4. Skill Synthesis & Anti-Proliferation Rule
 
-If tests fail repeatedly or stuck implementation is detected:
-1. `StuckDetector` intercepts execution loops and transitions to `TRIAGE`.
-2. Agent `0072 Patient Oracle` is invoked (strictly read-only).
-3. Classifies root cause:
-   - `IMPLEMENTATION_DEFECT` → Routes back to `IMPLEMENTATION`.
-   - `TEST_DEFECT` → Routes back to `TEST_AUTHORING` for test revision.
-   - `SPECIFICATION_DEFECT` → Routes back to `SPECIFICATION_REVIEW`.
-   - `AMBIGUOUS_REQUIREMENT` → Routes to `HUMAN_GATE`.
+**Active Agent:** `Inventive Weaver` (Skill Architect)  
+**State:** `SKILL_SYNTHESIS`
+
+### The Anti-Proliferation Invariant
+To prevent repository bloat, a procedure graduates into a skill **only after ≥3 verified real uses** in event or devlog history. Skills must be repeated, parameterized, and declare concrete success criteria.
+
+### Curating a Skill
+1. Transition from `PLANNING` or `DIARY`:
+   ```text
+   /hitm-approve SKILL_SYNTHESIS
+   ```
+2. Prompt Pi:
+   ```text
+   Synthesize the recurring test-authoring procedure into a parameterized skill in skills/author-tests.md citing our last 3 sprint uses.
+   ```
+3. Guard `G-SKILL-001` verifies that ≥3 uses are documented in `verifiedUses`.
+4. Prompts to return to `PLANNING` (`T-097`) or advance to `PUBLICATION_READY` (`T-095`).
 
 ---
 
-## 5. Process Restart & Safe Resumption
+## 5. Safe Resumption Across Process Restarts
 
-When Pi exits or restarts:
-1. Startup detects `.hitm/events.jsonl` exists → selects `RESUME_WORKFLOW`.
-2. Transitions: `PROJECT_DISCOVERY → STATE_RECOVERY`.
-3. Replays canonical event journal to determine canonical state.
-4. Transitions: `STATE_RECOVERY → STATE_VALIDATION`.
-   - Verifies live Git HEAD matches recorded commit.
-   - Verifies live test files on disk match `.hitm/test-suite.lock.json`.
-   - Verifies working tree cleanliness.
-5. If all checks **MATCH** → advances via `T-003B` directly to the recovered state.
-6. If any check **MISMATCHES** → freezes via `T-003C` into `REPOSITORY_CONFLICT`, requiring human resolution.
+When you close your terminal or restart Pi:
+1. PiRunner discovers `.hitm/events.jsonl` exists → selects `RESUME_WORKFLOW`.
+2. Replays the event journal to recover canonical state (`STATE_RECOVERY`).
+3. `StateValidationService` independently inspects:
+   - Live Git commit SHA and branch.
+   - Working tree cleanliness.
+   - Live test files on disk against `.hitm/test-suite.lock.json`.
+   - Dependency lockfile hash against `KnowledgeSnapshot`.
+4. If all checks **MATCH** → seamlessly resumes at the exact canonical state.
+5. If divergence is detected (e.g. dirty working tree or modified test files) → freezes into `REPOSITORY_CONFLICT` and requires human resolution.
 
 ---
 
@@ -269,8 +247,9 @@ When Pi exits or restarts:
 
 | Command | Description |
 |---|---|
-| `/hitm-status` | Displays current state, entry mode, active agent, test lock status, and **allowed next transitions**. |
-| `/hitm-prompt` | Displays the active agent's governance sub-prompt (identity, boundaries, and schema requirements). |
-| `/hitm-approve [STATE]` | Interactive Human-In-The-Middle transition gate. Prompts with a confirmation dialog. If `[STATE]` is omitted, suggests the primary legal next state. |
-| `/hitm-run [PROMPT]` | Dispatches the active agent with its governance prompt and context artifacts. Ingests emitted JSON, validates against schema, and advances the workflow. |
-| `/hitm-test` | Executes deterministic `TestRunner` against the locked test suite hash using live subprocess execution (`npm test`). |
+| `/hitm-status` | Displays current state, active `[ID NAME]` badge, test lock status, and **allowed next transitions**. |
+| `/hitm-prompt` | Displays the active agent's governance sub-prompt and capability boundaries. |
+| `/hitm-approve [STATE]` | Interactive human authorization dialog. If `[STATE]` is omitted, suggests the primary legal next state. |
+| `/hitm-test` | Runs the deterministic test runner against the locked test suite hash via live subprocess (`npm test`). |
+| `/hitm-roster [regenerate]` | Displays or re-rolls the project's randomized agent IDs and emotional-technological names. |
+
