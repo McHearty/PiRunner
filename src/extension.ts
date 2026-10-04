@@ -17,6 +17,7 @@ import { StateRecoveryService } from './domain/project/StateRecovery.js';
 import { StateValidationService } from './domain/project/StateValidation.js';
 import { TestSuiteLock } from './domain/testing/TestSuiteLock.js';
 import { ArtifactIngestionService } from './domain/artifacts/ArtifactIngestion.js';
+import { getAllowedTargetStates } from './domain/workflow/WorkflowTransition.js';
 
 export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   const root = process.cwd();
@@ -131,15 +132,22 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   }
 
+  // /hitm-status: shows current state and all allowed next states
   pi.registerCommand('hitm-status', {
-    description: 'Display current HITM state, mode, active agent, and test lock status',
+    description: 'Display current state, mode, active agent, lock, and legal next transitions',
     handler: async (_args: string, ctx: ExtensionContext) => {
       const state = controller.getState();
       const currentAgent = syncAgentToState(state);
       const lock = TestSuiteLock.loadLock();
       const lockSummary = lock ? `Locked (${lock.testSuiteContentHash.slice(0, 8)})` : 'Unlocked';
+      
+      const legalNext = getAllowedTargetStates(state).filter(
+        s => !['ARTIFACT_INVALID', 'REPOSITORY_CONFLICT', 'ABORT', 'AGENT_FAILED'].includes(s)
+      );
+
       ctx.ui.notify(
-        `State: [${state}] | Mode: ${discovery.entryMode} | Agent: ${currentAgent} | TestLock: ${lockSummary}`,
+        `State: [${state}] | Mode: ${discovery.entryMode} | Agent: ${currentAgent} | TestLock: ${lockSummary}\n` +
+        `Allowed Next Transitions: [${legalNext.join(', ')}]`,
         'info'
       );
     }
@@ -154,22 +162,38 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   });
 
+  // /hitm-approve: guides with legal states if omitted
   pi.registerCommand('hitm-approve', {
     description: 'Authorize and execute next state transition as Human Authority',
     handler: async (targetState: string, ctx: ExtensionContext) => {
-      const target = targetState.trim() as WorkflowState;
+      const currentState = controller.getState();
+      const legalNext = getAllowedTargetStates(currentState).filter(
+        s => !['ARTIFACT_INVALID', 'REPOSITORY_CONFLICT', 'ABORT', 'AGENT_FAILED'].includes(s)
+      );
+
+      const target = (targetState.trim() || legalNext[0] || '') as WorkflowState;
       if (!target) {
-        ctx.ui.notify('Usage: /hitm-approve <TARGET_STATE>', 'warning');
+        ctx.ui.notify(`No legal forward transitions from [${currentState}].`, 'warning');
         return;
       }
+
+      if (!legalNext.includes(target)) {
+        ctx.ui.notify(
+          `Illegal transition [${currentState} → ${target}].\nLegal next states are: [${legalNext.join(', ')}]`,
+          'warning'
+        );
+        return;
+      }
+
       const confirmed = await ctx.ui.confirm(
         'HITM Transition Authorization',
-        `Authorize transition from ${controller.getState()} to ${target}?`
+        `Authorize transition from [${currentState}] to [${target}]?`
       );
+
       if (confirmed) {
         try {
           await controller.transition(target, { actorType: 'HUMAN', actorId: 'lead-human' }, { humanApproved: true });
-          ctx.ui.notify(`State advanced to ${controller.getState()}`, 'info');
+          ctx.ui.notify(`State advanced to [${controller.getState()}]`, 'info');
         } catch (err: any) {
           ctx.ui.notify(`Transition rejected: ${err.message}`, 'error');
         }
