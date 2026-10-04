@@ -1,8 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { WorkflowController } from './application/WorkflowController.js';
 import { ArtifactValidator } from './domain/artifacts/ArtifactValidator.js';
-import { ArtifactStore } from './domain/artifacts/ArtifactStore.js';
-import { EventStore } from './domain/events/EventStore.js';
 import { FileArtifactStore } from './infrastructure/artifacts/FileArtifactStore.js';
 import { FileEventStore } from './infrastructure/events/FileEventStore.js';
 import { RealDeterministicTestRunner } from './infrastructure/testing/RealDeterministicTestRunner.js';
@@ -11,29 +9,39 @@ import { GitKnowledgeProvider } from './infrastructure/knowledge/GitKnowledgePro
 import { PathCapabilityEnforcer } from './domain/repository/PathCapability.js';
 import { AgentPromptFactory } from './agents/AgentPrompts.js';
 import { WorkflowState } from './domain/workflow/WorkflowState.js';
+import { ProjectDiscoveryService } from './domain/project/ProjectDiscovery.js';
+import { ProjectIntakeService } from './domain/project/ProjectIntake.js';
 
 export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   const root = process.cwd();
   const validator = new ArtifactValidator();
-  const artifactStore = new ArtifactStore(validator);
-  const eventStore = new EventStore();
+  const artifactStore = new FileArtifactStore(validator);
+  const eventStore = new FileEventStore();
   const testRunner = new RealDeterministicTestRunner(root);
   const agentRunner = new PiAgentRunner(root);
-  const knowledgeProvider = new GitKnowledgeProvider(root);
+
+  // Discover entry mode & repository state on startup (§6)
+  const discovery = ProjectDiscoveryService.inspect(root);
+  const workflowId = 'pirunner-canonical';
 
   const controller = new WorkflowController(
-    'self-improving-harness',
-    artifactStore,
-    eventStore,
+    workflowId,
+    artifactStore as any,
+    eventStore as any,
     testRunner,
-    agentRunner
+    agentRunner,
+    {},
+    'PROJECT_DISCOVERY'
   );
+  controller.setRepositorySnapshot(discovery.repositorySnapshot);
 
-  let activeAgentId = '0012'; // Initial state: Concept
+  let activeAgentId = '0012';
 
-  // Resolve active agent based on current workflow state
   function syncAgentToState(state: WorkflowState): string {
     switch (state) {
+      case 'PROJECT_DISCOVERY':
+      case 'PROJECT_INTAKE':
+      case 'PROJECT_BASELINE': return '0000';
       case 'CONCEPT': return '0012';
       case 'SPECIFICATION': return '0024';
       case 'PLANNING': return '0036';
@@ -47,6 +55,25 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
       default: return '0000';
     }
   }
+
+  // Auto-advance discovery if at initial PROJECT_DISCOVERY state
+  if (controller.getState() === 'PROJECT_DISCOVERY') {
+    if (discovery.entryMode === 'RESUME_WORKFLOW') {
+      controller.transition('STATE_RECOVERY', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'RESUME_WORKFLOW' } })
+        .then(() => controller.transition('STATE_VALIDATION', { actorType: 'SYSTEM', actorId: '0000' }))
+        .catch(() => {});
+    } else if (discovery.entryMode === 'ADOPT_EXISTING_PROJECT') {
+      controller.transition('PROJECT_INTAKE', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' } })
+        .then(() => {
+          const baseline = ProjectIntakeService.createBaselineArtifact(workflowId, discovery.repositorySnapshot, root);
+          artifactStore.save(baseline);
+          return controller.transition('PROJECT_BASELINE', { actorType: 'SYSTEM', actorId: '0000' });
+        })
+        .catch(() => {});
+    }
+  }
+
+  activeAgentId = syncAgentToState(controller.getState());
 
   // 1. Tool-level capability boundary hook
   pi.on('tool_call', async (call) => {
@@ -63,12 +90,12 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
 
   // 2. Command: /hitm status
   pi.registerCommand('hitm-status', {
-    description: 'Display current HITM workflow state, sequence, and active agent prompt',
+    description: 'Display current HITM workflow state, entry mode, and active agent',
     handler: async (_args: string, ctx: ExtensionContext) => {
       const state = controller.getState();
       activeAgentId = syncAgentToState(state);
       ctx.ui.notify(
-        `State: [${state}] | Active Agent: ${activeAgentId} | Events: ${eventStore.getNextSequence()}`,
+        `State: [${state}] | Mode: ${discovery.entryMode} | Agent: ${activeAgentId} | Events: ${eventStore.getNextSequence(workflowId)}`,
         'info'
       );
     }
@@ -115,11 +142,11 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
       ctx.ui.notify('Executing deterministic test suite against active workspace...', 'info');
       try {
         const result = await testRunner.execute({
-          workflowId: 'self-improving-harness',
+          workflowId,
           taskId: 'local-test',
           testSpecificationArtifactId: 'art-live',
-          testSuiteContentHash: '', // Hash verified dynamically
-          repositoryRevision: 'live-revision',
+          testSuiteContentHash: '',
+          repositoryRevision: discovery.repositorySnapshot.headSha,
           dependencyLockHash: 'live-lock',
           executionCommand: 'npm test'
         });

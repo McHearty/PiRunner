@@ -1,6 +1,6 @@
 import { ArtifactValidator, ValidationResult } from './ArtifactValidator.js';
 
-export interface StoredArtifact<T = Record<string, unknown>> {
+export interface StoredArtifact<T = any> {
   artifactId: string;
   artifactType: string;
   schemaVersion: string;
@@ -26,7 +26,7 @@ export class ArtifactStore {
 
   constructor(private readonly validator: ArtifactValidator) {}
 
-  public save(artifact: StoredArtifact): ValidationResult {
+  public save(artifact: StoredArtifact<any>): ValidationResult {
     const valResult = this.validator.validateArtifact(artifact);
     if (!valResult.valid) {
       return valResult;
@@ -36,17 +36,17 @@ export class ArtifactStore {
     return { valid: true, errors: [] };
   }
 
-  public get<T = Record<string, unknown>>(artifactId: string): StoredArtifact<T> | undefined {
+  public get<T = any>(artifactId: string): StoredArtifact<T> | undefined {
     return this.artifacts.get(artifactId) as StoredArtifact<T> | undefined;
   }
 
-  public getByType<T = Record<string, unknown>>(artifactType: string): StoredArtifact<T>[] {
+  public getByType<T = any>(artifactType: string): StoredArtifact<T>[] {
     return Array.from(this.artifacts.values()).filter(
       a => a.artifactType === artifactType
     ) as StoredArtifact<T>[];
   }
 
-  public getLatestAccepted<T = Record<string, unknown>>(artifactType: string): StoredArtifact<T> | undefined {
+  public getLatestAccepted<T = any>(artifactType: string): StoredArtifact<T> | undefined {
     const matching = this.getByType<T>(artifactType).filter(a => a.status === 'ACCEPTED');
     return matching[matching.length - 1];
   }

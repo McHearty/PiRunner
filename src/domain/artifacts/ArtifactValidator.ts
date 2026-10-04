@@ -56,6 +56,7 @@ export class ArtifactValidator {
 
   public validatePayload(artifactType: string, payload: unknown): ValidationResult {
     const schemaMap: Record<string, string> = {
+      ProjectBaseline: 'https://hitm.example/schemas/project-baseline.schema.json',
       ConceptPackage: 'https://hitm.example/schemas/concept-package.schema.json',
       MasterSpecification: 'https://hitm.example/schemas/master-specification.schema.json',
       TestSpecification: 'https://hitm.example/schemas/test-specification.schema.json',

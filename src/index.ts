@@ -16,6 +16,9 @@ export * from './domain/agents/AgentRunner.js';
 export * from './domain/repository/PathCapability.js';
 export * from './domain/knowledge/KnowledgeProvider.js';
 
+export * from './domain/project/ProjectDiscovery.js';
+export * from './domain/project/ProjectIntake.js';
+
 export * from './application/WorkflowController.js';
 
 export * from './infrastructure/agents/FakeAgentRunner.js';

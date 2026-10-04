@@ -1,5 +1,5 @@
-import { writeFileSync, readFileSync, existsSync, appendFileSync, mkdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { WorkflowEvent } from '../../domain/workflow/WorkflowEvent.js';
 import { SequenceOrderError } from '../../domain/workflow/WorkflowReducer.js';
 
@@ -25,7 +25,8 @@ export class FileEventStore {
   }
 
   public append(event: WorkflowEvent): void {
-    const expectedSeq = this.events.length;
+    const workflowEvents = this.getEvents(event.workflowId);
+    const expectedSeq = workflowEvents.length;
     if (event.sequence !== expectedSeq) {
       throw new SequenceOrderError(expectedSeq, event.sequence);
     }
@@ -40,7 +41,7 @@ export class FileEventStore {
     return [...this.events];
   }
 
-  public getNextSequence(): number {
-    return this.events.length;
+  public getNextSequence(workflowId?: string): number {
+    return this.getEvents(workflowId).length;
   }
 }

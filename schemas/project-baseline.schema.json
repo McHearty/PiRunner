@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hitm.example/schemas/project-baseline.schema.json",
+  "title": "ProjectBaseline",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "repositoryIdentity",
+    "baseRevision",
+    "branch",
+    "workingTreeState",
+    "projectType",
+    "buildSystem",
+    "specificationRefs",
+    "testRefs",
+    "documentationRefs",
+    "dependencyLockHash",
+    "sourceInventory",
+    "testInventory",
+    "existingCiConfiguration",
+    "detectedUncommittedChanges",
+    "unresolvedProjectQuestions",
+    "intakeTimestamp",
+    "repositorySnapshotHash"
+  ],
+  "properties": {
+    "repositoryIdentity": { "type": "string" },
+    "baseRevision": { "type": "string" },
+    "branch": { "type": "string" },
+    "workingTreeState": { "type": "string", "enum": ["CLEAN", "DIRTY"] },
+    "projectType": { "type": "string" },
+    "buildSystem": { "type": ["string", "null"] },
+    "specificationRefs": {
+      "type": "array",
+      "items": { "$ref": "https://hitm.example/schemas/artifact-envelope.schema.json#/$defs/SourceRef" }
+    },
+    "testRefs": {
+      "type": "array",
+      "items": { "$ref": "https://hitm.example/schemas/artifact-envelope.schema.json#/$defs/SourceRef" }
+    },
+    "documentationRefs": {
+      "type": "array",
+      "items": { "$ref": "https://hitm.example/schemas/artifact-envelope.schema.json#/$defs/SourceRef" }
+    },
+    "dependencyLockHash": { "type": ["string", "null"] },
+    "sourceInventory": {
+      "type": "array",
+      "items": { "$ref": "https://hitm.example/schemas/artifact-envelope.schema.json#/$defs/SourceRef" }
+    },
+    "testInventory": {
+      "type": "array",
+      "items": { "$ref": "https://hitm.example/schemas/artifact-envelope.schema.json#/$defs/SourceRef" }
+    },
+    "existingCiConfiguration": {
+      "type": "array",
+      "items": { "$ref": "https://hitm.example/schemas/artifact-envelope.schema.json#/$defs/SourceRef" }
+    },
+    "detectedUncommittedChanges": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "unresolvedProjectQuestions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "intakeTimestamp": { "type": "string", "format": "date-time" },
+    "repositorySnapshotHash": { "type": "string" }
+  }
+}

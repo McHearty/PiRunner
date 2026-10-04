@@ -16,7 +16,7 @@ export class FileArtifactStore {
     }
   }
 
-  public save(artifact: StoredArtifact): ValidationResult {
+  public save(artifact: StoredArtifact<any>): ValidationResult {
     const valResult = this.validator.validateArtifact(artifact);
     if (!valResult.valid) {
       return valResult;
@@ -27,13 +27,13 @@ export class FileArtifactStore {
     return { valid: true, errors: [] };
   }
 
-  public get<T = Record<string, unknown>>(artifactId: string): StoredArtifact<T> | undefined {
+  public get<T = any>(artifactId: string): StoredArtifact<T> | undefined {
     const filePath = join(this.storageDir, `${artifactId}.json`);
     if (!existsSync(filePath)) return undefined;
     return JSON.parse(readFileSync(filePath, 'utf8')) as StoredArtifact<T>;
   }
 
-  public getByType<T = Record<string, unknown>>(artifactType: string): StoredArtifact<T>[] {
+  public getByType<T = any>(artifactType: string): StoredArtifact<T>[] {
     const files = readdirSync(this.storageDir).filter(f => f.endsWith('.json'));
     const matches: StoredArtifact<T>[] = [];
     for (const f of files) {

@@ -1,4 +1,12 @@
+export type ProjectEntryWorkflowState =
+  | 'PROJECT_DISCOVERY'
+  | 'PROJECT_INTAKE'
+  | 'PROJECT_BASELINE'
+  | 'STATE_RECOVERY'
+  | 'STATE_VALIDATION';
+
 export type PrimaryWorkflowState =
+  | ProjectEntryWorkflowState
   | 'CONCEPT'
   | 'CONCEPT_REVIEW'
   | 'SPECIFICATION'
