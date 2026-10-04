@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hitm.example/schemas/test-execution-result.schema.json",
+  "title": "TestExecutionResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "testSpecificationArtifactId",
+    "testSuiteContentHash",
+    "repositoryRevision",
+    "dependencyLockHash",
+    "executionCommand",
+    "passed",
+    "failed",
+    "skipped",
+    "errored",
+    "executedTests"
+  ],
+  "properties": {
+    "status": { "type": "string", "enum": ["PASSED", "FAILED", "ERROR"] },
+    "testSpecificationArtifactId": { "type": "string" },
+    "testSuiteContentHash": { "type": "string", "minLength": 64, "maxLength": 64 },
+    "repositoryRevision": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "dependencyLockHash": { "type": "string", "minLength": 64, "maxLength": 64 },
+    "executionCommand": { "type": "string" },
+    "passed": { "type": "integer", "minimum": 0 },
+    "failed": { "type": "integer", "minimum": 0 },
+    "skipped": { "type": "integer", "minimum": 0 },
+    "errored": { "type": "integer", "minimum": 0 },
+    "executedTests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["testId", "status"],
+        "properties": {
+          "testId": { "type": "string" },
+          "status": { "type": "string", "enum": ["PASSED", "FAILED", "SKIPPED", "ERROR"] },
+          "durationMs": { "type": "integer", "minimum": 0 },
+          "failureOutput": { "type": "string" }
+        }
+      }
+    },
+    "rawOutput": { "type": "string" },
+    "environmentFingerprint": { "type": "string" }
+  }
+}

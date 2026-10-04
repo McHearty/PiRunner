@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hitm.example/schemas/master-specification.schema.json",
+  "title": "MasterSpecification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "title",
+    "version",
+    "conceptArtifactId",
+    "architecture",
+    "functionalRequirements",
+    "nonFunctionalRequirements",
+    "interfaces",
+    "invariants",
+    "dataContracts",
+    "stateMachines",
+    "errorBehavior",
+    "securityBoundaries",
+    "persistenceRequirements",
+    "compatibilityRequirements",
+    "testRequirements",
+    "acceptanceCriteria",
+    "implementationConstraints"
+  ],
+  "properties": {
+    "title": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "conceptArtifactId": { "type": "string" },
+    "architecture": {
+      "type": "object",
+      "required": ["overview", "components", "boundaries"],
+      "properties": {
+        "overview": { "type": "string" },
+        "components": { "type": "array", "items": { "type": "string" } },
+        "boundaries": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "functionalRequirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "statement", "priority"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^REQ-\\d+$" },
+          "statement": { "type": "string" },
+          "priority": { "type": "string", "enum": ["MUST", "SHOULD", "MAY"] }
+        }
+      },
+      "minItems": 1
+    },
+    "nonFunctionalRequirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "category", "statement"],
+        "properties": {
+          "id": { "type": "string" },
+          "category": { "type": "string" },
+          "statement": { "type": "string" }
+        }
+      }
+    },
+    "interfaces": { "type": "array", "items": { "type": "object" } },
+    "invariants": { "type": "array", "items": { "type": "string" } },
+    "dataContracts": { "type": "array", "items": { "type": "object" } },
+    "stateMachines": { "type": "array", "items": { "type": "object" } },
+    "errorBehavior": { "type": "array", "items": { "type": "object" } },
+    "securityBoundaries": { "type": "array", "items": { "type": "string" } },
+    "persistenceRequirements": { "type": "array", "items": { "type": "string" } },
+    "compatibilityRequirements": { "type": "array", "items": { "type": "string" } },
+    "testRequirements": { "type": "array", "items": { "type": "string" } },
+    "acceptanceCriteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "statement", "requirementIds"],
+        "properties": {
+          "id": { "type": "string" },
+          "statement": { "type": "string" },
+          "requirementIds": { "type": "array", "items": { "type": "string", "pattern": "^REQ-\\d+$" } }
+        }
+      },
+      "minItems": 1
+    },
+    "implementationConstraints": { "type": "array", "items": { "type": "string" } },
+    "unresolvedQuestions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "question", "severity"],
+        "properties": {
+          "id": { "type": "string" },
+          "question": { "type": "string" },
+          "severity": { "type": "string", "enum": ["BLOCKING", "IMPORTANT", "NICE_TO_HAVE"] }
+        }
+      }
+    }
+  }
+}

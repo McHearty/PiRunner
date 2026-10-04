@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hitm.example/schemas/knowledge-snapshot.schema.json",
+  "title": "KnowledgeSnapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sourceRevision",
+    "dependencyLockHash",
+    "verifiedAt",
+    "freshnessPolicyVersion",
+    "relevantSourceFiles",
+    "relevantSymbols",
+    "dependencies",
+    "documentationRefs"
+  ],
+  "properties": {
+    "sourceRevision": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "dependencyLockHash": { "type": "string", "minLength": 64, "maxLength": 64 },
+    "verifiedAt": { "type": "string", "format": "date-time" },
+    "freshnessPolicyVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "relevantSourceFiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "contentHash"],
+        "properties": {
+          "path": { "type": "string" },
+          "contentHash": { "type": "string" },
+          "language": { "type": "string" }
+        }
+      },
+      "uniqueItems": true
+    },
+    "relevantSymbols": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "kind", "location"],
+        "properties": {
+          "name": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": ["class", "interface", "type", "function", "method", "property", "enum", "const", "variable", "module", "other"]
+          },
+          "location": {
+            "type": "object",
+            "required": ["path", "line"],
+            "properties": {
+              "path": { "type": "string" },
+              "line": { "type": "integer", "minimum": 1 },
+              "column": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "signature": { "type": "string" },
+          "exported": { "type": "boolean" }
+        }
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "version", "resolved"],
+        "properties": {
+          "name": { "type": "string" },
+          "version": { "type": "string" },
+          "resolved": { "type": "string" },
+          "ecosystem": { "type": "string", "enum": ["npm", "pypi", "crates", "go", "maven", "other"] },
+          "manifestPath": { "type": "string" }
+        }
+      }
+    },
+    "documentationRefs": { "type": "array", "items": { "type": "object" } },
+    "notes": { "type": "string" }
+  }
+}

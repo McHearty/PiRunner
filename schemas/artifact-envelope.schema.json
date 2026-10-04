@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hitm.example/schemas/artifact-envelope.schema.json",
+  "title": "ArtifactEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifactId",
+    "artifactType",
+    "schemaVersion",
+    "workflowId",
+    "taskId",
+    "agentId",
+    "createdAt",
+    "parentArtifactIds",
+    "sourceRefs",
+    "status",
+    "payload"
+  ],
+  "properties": {
+    "artifactId": { "type": "string", "minLength": 1 },
+    "artifactType": {
+      "type": "string",
+      "enum": [
+        "ConceptPackage",
+        "MasterSpecification",
+        "ImplementationResult",
+        "TriageReport",
+        "ReviewResult",
+        "KnowledgeSnapshot",
+        "DailyPlan",
+        "SprintSpecification",
+        "TestSpecification",
+        "TestExecutionResult",
+        "DailyDevlog",
+        "PublicationPackage"
+      ]
+    },
+    "schemaVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "workflowId": { "type": "string", "minLength": 1 },
+    "taskId": { "type": "string", "minLength": 1 },
+    "agentId": { "type": "string", "pattern": "^\\d{4}$" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "parentArtifactIds": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "sourceRefs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/SourceRef" }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["DRAFT", "SUBMITTED", "ACCEPTED", "REJECTED", "SUPERSEDED"]
+    },
+    "payload": { "type": "object" }
+  },
+  "$defs": {
+    "SourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "identifier"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["FILE", "GIT", "DOCUMENTATION", "DEPENDENCY", "SESSION", "TEST", "COMMAND", "HUMAN_DECISION"]
+        },
+        "identifier": { "type": "string" },
+        "revision": { "type": "string" },
+        "location": { "type": "string" },
+        "retrievedAt": { "type": "string", "format": "date-time" },
+        "checksum": { "type": "string" }
+      }
+    }
+  }
+}

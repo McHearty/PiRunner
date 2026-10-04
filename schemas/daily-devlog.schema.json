@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hitm.example/schemas/daily-devlog.schema.json",
+  "title": "DailyDevlog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "dayNumber",
+    "date",
+    "accomplishments",
+    "blockersEncountered",
+    "decisionsMade"
+  ],
+  "properties": {
+    "dayNumber": { "type": "integer", "minimum": 1 },
+    "date": { "type": "string" },
+    "accomplishments": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "blockersEncountered": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "decisionsMade": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "notes": { "type": "string" }
+  }
+}

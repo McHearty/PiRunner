@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hitm.example/schemas/review-result.schema.json",
+  "title": "ReviewResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "sprintSpecificationArtifactId",
+    "implementationResultArtifactId",
+    "testExecutionResultArtifactId",
+    "commitSha",
+    "blockingFindings",
+    "acceptanceCriteriaResults",
+    "summary"
+  ],
+  "properties": {
+    "status": { "type": "string", "enum": ["PASS", "FAIL", "BLOCKED"] },
+    "sprintSpecificationArtifactId": { "type": "string" },
+    "implementationResultArtifactId": { "type": "string" },
+    "testExecutionResultArtifactId": { "type": "string" },
+    "commitSha": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "blockingFindings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "acceptanceCriteriaResults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["criterionId", "satisfied"],
+        "properties": {
+          "criterionId": { "type": "string" },
+          "satisfied": { "type": "boolean" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "summary": { "type": "string", "minLength": 1 }
+  }
+}

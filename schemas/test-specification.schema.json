@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hitm.example/schemas/test-specification.schema.json",
+  "title": "TestSpecification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "masterSpecificationArtifactId",
+    "sprintSpecificationArtifactId",
+    "testCases",
+    "requirementCoverage",
+    "invariants",
+    "fixtures",
+    "testFramework",
+    "testRootPaths",
+    "protectedPaths",
+    "executionCommand",
+    "testSuiteContentHash",
+    "unresolvedQuestions"
+  ],
+  "properties": {
+    "masterSpecificationArtifactId": { "type": "string" },
+    "sprintSpecificationArtifactId": { "type": "string" },
+    "testCases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/TestCase" }
+    },
+    "requirementCoverage": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/RequirementCoverage" }
+    },
+    "invariants": { "type": "array", "items": { "type": "string" } },
+    "fixtures": { "type": "array", "items": { "type": "string" } },
+    "testFramework": { "type": "string", "minLength": 1 },
+    "testRootPaths": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
+    "protectedPaths": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "executionCommand": { "type": "string", "minLength": 1 },
+    "testSuiteContentHash": { "type": "string", "minLength": 64, "maxLength": 64 },
+    "unresolvedQuestions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "question", "severity"],
+        "properties": {
+          "id": { "type": "string" },
+          "question": { "type": "string" },
+          "severity": { "type": "string", "enum": ["BLOCKING", "IMPORTANT", "NICE_TO_HAVE"] }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "TestCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "requirementIds",
+        "acceptanceCriteriaIds",
+        "category",
+        "description",
+        "preconditions",
+        "inputs",
+        "expectedBehavior",
+        "failureCondition",
+        "testPath",
+        "testSymbol"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "requirementIds": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "acceptanceCriteriaIds": { "type": "array", "items": { "type": "string" } },
+        "category": {
+          "type": "string",
+          "enum": ["UNIT", "INTEGRATION", "CONTRACT", "PROPERTY", "REGRESSION", "ERROR", "STATE_MACHINE", "SECURITY", "COMPATIBILITY"]
+        },
+        "description": { "type": "string" },
+        "preconditions": { "type": "array", "items": { "type": "string" } },
+        "inputs": { "type": "array", "items": { "type": "string" } },
+        "expectedBehavior": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "failureCondition": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "testPath": { "type": "string" },
+        "testSymbol": { "type": "string" }
+      }
+    },
+    "RequirementCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requirementId", "disposition"],
+      "properties": {
+        "requirementId": { "type": "string" },
+        "disposition": { "type": "string", "enum": ["AUTOMATED", "MANUAL", "NOT_TESTABLE"] },
+        "testCaseIds": { "type": "array", "items": { "type": "string" } },
+        "justification": { "type": "string" }
+      }
+    }
+  }
+}

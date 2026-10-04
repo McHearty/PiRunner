@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hitm.example/schemas/triage-report.schema.json",
+  "title": "TriageReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "category",
+    "disposition",
+    "evidence",
+    "summary",
+    "retryCount"
+  ],
+  "properties": {
+    "category": {
+      "type": "string",
+      "enum": [
+        "IMPLEMENTATION_DEFECT",
+        "SPECIFICATION_DEFECT",
+        "KNOWLEDGE_DEFECT",
+        "DEPENDENCY_DEFECT",
+        "ENVIRONMENT_DEFECT",
+        "REPOSITORY_CONFLICT",
+        "API_MISMATCH",
+        "TEST_FAILURE",
+        "TEST_DEFECT",
+        "AMBIGUOUS_REQUIREMENT",
+        "HUMAN_DECISION_REQUIRED"
+      ]
+    },
+    "disposition": {
+      "type": "string",
+      "enum": [
+        "RESUME_IMPLEMENTATION",
+        "UPDATE_KNOWLEDGE",
+        "REPLAN",
+        "SPECIFICATION_REVIEW",
+        "TEST_AUTHORING",
+        "HUMAN_GATE",
+        "ABORT"
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "https://hitm.example/schemas/artifact-envelope.schema.json#/$defs/SourceRef" },
+      "minItems": 1
+    },
+    "responsibleArtifactId": { "type": ["string", "null"] },
+    "proposedNextAgentId": { "type": ["string", "null"], "pattern": "^\\d{4}$" },
+    "summary": { "type": "string", "minLength": 1 },
+    "rootCauseAnalysis": {
+      "type": "object",
+      "properties": {
+        "observedFailure": { "type": "string" },
+        "immediateCause": { "type": "string" },
+        "contributingCause": { "type": "string" },
+        "authoritativeSource": { "type": "string" },
+        "correctiveAction": { "type": "string" },
+        "preventiveAction": { "type": "string" }
+      }
+    },
+    "retryCount": { "type": "integer", "minimum": 0 },
+    "failureSignatures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["class", "location", "fingerprint"],
+        "properties": {
+          "class": { "type": "string" },
+          "location": { "type": "string" },
+          "fingerprint": { "type": "string" },
+          "raw": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+export type PrimaryWorkflowState =
+  | 'CONCEPT'
+  | 'CONCEPT_REVIEW'
+  | 'SPECIFICATION'
+  | 'SPECIFICATION_REVIEW'
+  | 'PLANNING'
+  | 'KNOWLEDGE_SYNC'
+  | 'SPRINT_READY'
+  | 'TEST_AUTHORING'
+  | 'TEST_READY'
+  | 'IMPLEMENTATION'
+  | 'TRIAGE'
+  | 'REWORK'
+  | 'COMMIT_CREATED'
+  | 'REVIEW'
+  | 'SPRINT_ACCEPTED'
+  | 'PUSH_GATE'
+  | 'REMOTE_PUBLISHED'
+  | 'SPRINT_COMPLETE'
+  | 'DAY_COMPLETE'
+  | 'DIARY'
+  | 'PUBLICATION_READY'
+  | 'PUBLISHED';
+
+export type FailureWorkflowState =
+  | 'BLOCKED'
+  | 'HUMAN_GATE'
+  | 'AGENT_FAILED'
+  | 'REPOSITORY_CONFLICT'
+  | 'ARTIFACT_INVALID'
+  | 'ABORT';
+
+export type WorkflowState = PrimaryWorkflowState | FailureWorkflowState;

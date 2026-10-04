@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hitm.example/schemas/publication-package.schema.json",
+  "title": "PublicationPackage",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sprintSpecificationArtifactId",
+    "headline",
+    "summary",
+    "highlights",
+    "targetChannels"
+  ],
+  "properties": {
+    "sprintSpecificationArtifactId": { "type": "string" },
+    "headline": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "highlights": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "targetChannels": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}
