@@ -108,3 +108,18 @@ describe('Transition Registry Fail-Closed Integrity (§21, §22)', () => {
     }
   });
 });
+
+describe('Repository Conflict Resolution Transitions (§9, §38)', () => {
+  it('permits legal exit transitions out of REPOSITORY_CONFLICT (T-103A, T-103B, T-103C)', () => {
+    expect(isTransitionLegal('REPOSITORY_CONFLICT', 'PROJECT_INTAKE')).toBe(true);
+    expect(isTransitionLegal('REPOSITORY_CONFLICT', 'STATE_VALIDATION')).toBe(true);
+    expect(isTransitionLegal('REPOSITORY_CONFLICT', 'KNOWLEDGE_SYNC')).toBe(true);
+    expect(isTransitionLegal('REPOSITORY_CONFLICT', 'ABORT')).toBe(true);
+  });
+});
+
+describe('Planning Approval Direct Transitions (§27)', () => {
+  it('permits direct promotion from PLANNING to SPRINT_READY via T-030B', () => {
+    expect(isTransitionLegal('PLANNING', 'SPRINT_READY')).toBe(true);
+  });
+});

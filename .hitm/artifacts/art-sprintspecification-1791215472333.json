@@ -1,0 +1,78 @@
+{
+  "artifactId": "art-sprintspecification-1791215472333",
+  "artifactType": "SprintSpecification",
+  "schemaVersion": "1.0.0",
+  "workflowId": "pirunner-canonical",
+  "taskId": "task-PLANNING",
+  "agentId": "0036",
+  "createdAt": "2026-10-05T15:51:12.333Z",
+  "parentArtifactIds": [],
+  "sourceRefs": [
+    {
+      "type": "SESSION",
+      "identifier": "run-1791215472333"
+    }
+  ],
+  "status": "SUBMITTED",
+  "payload": {
+    "masterSpecificationArtifactId": "art-spec",
+    "sprintNumber": 1,
+    "goals": [
+      "Update README.md with current project state and changes",
+      "Update USAGE.md with accurate usage instructions",
+      "Generate conventional commit message and commit all uncommitted work"
+    ],
+    "tasks": [
+      {
+        "id": "TASK-1",
+        "title": "Review uncommitted changes and update README.md",
+        "requirementIds": [
+          "REQ-DOC-001"
+        ]
+      },
+      {
+        "id": "TASK-2",
+        "title": "Update USAGE.md with current usage instructions",
+        "requirementIds": [
+          "REQ-DOC-002"
+        ]
+      },
+      {
+        "id": "TASK-3",
+        "title": "Generate conventional commit message for all changes",
+        "requirementIds": [
+          "REQ-COMMIT-001"
+        ]
+      },
+      {
+        "id": "TASK-4",
+        "title": "Stage and commit all uncommitted work",
+        "requirementIds": [
+          "REQ-COMMIT-001"
+        ]
+      }
+    ],
+    "acceptanceCriteria": [
+      {
+        "id": "AC-001",
+        "statement": "README.md accurately reflects current project state and recent changes"
+      },
+      {
+        "id": "AC-002",
+        "statement": "USAGE.md provides correct, up-to-date usage instructions"
+      },
+      {
+        "id": "AC-003",
+        "statement": "Commit message follows conventional commit format and accurately describes all changes"
+      },
+      {
+        "id": "AC-004",
+        "statement": "All uncommitted work is properly staged and committed"
+      },
+      {
+        "id": "AC-005",
+        "statement": "git status shows clean working tree after commit"
+      }
+    ]
+  }
+}

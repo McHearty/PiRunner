@@ -41,7 +41,7 @@ export class StateValidationService {
       reasons.push(`Working tree is dirty in state [${state}] where clean tree is mandatory`);
     }
 
-    // 2. Fail-Closed Live Test Suite Verification (§20, §30) - NO FALLBACK TO ['tests']
+    // 2. Fail-Closed Live Test Suite Verification (§20, §30) Derived from Accepted TestSpecification
     const testLockedStates: WorkflowState[] = [
       'TEST_READY',
       'IMPLEMENTATION',
@@ -61,11 +61,15 @@ export class StateValidationService {
         if (!testSpec) {
           reasons.push(`Cannot validate test suite on resume: No accepted TestSpecification found for state [${state}]`);
         } else {
-          const specRoots = (testSpec.payload as any)?.testRootPaths;
+          const specPayload = testSpec.payload as any;
+          const specRoots = specPayload?.testRootPaths;
+          const specFramework = specPayload?.testFramework || 'vitest';
+          const specCommand = specPayload?.executionCommand || 'npm test';
+
           if (!Array.isArray(specRoots) || specRoots.length === 0) {
             reasons.push('Cannot validate test suite on resume: Accepted TestSpecification does not define valid testRootPaths');
           } else {
-            if ((testSpec.payload as any).testSuiteContentHash !== lock.testSuiteContentHash) {
+            if (specPayload.testSuiteContentHash !== lock.testSuiteContentHash) {
               reasons.push('TestSuiteLock hash does not match accepted TestSpecification');
             }
 
@@ -74,8 +78,8 @@ export class StateValidationService {
               reasons.push(`No live test files found in declared testRootPaths: [${specRoots.join(', ')}]`);
             } else {
               const liveHash = TestSuiteHasher.hash({
-                testFramework: 'vitest',
-                executionCommand: 'npm test',
+                testFramework: specFramework,
+                executionCommand: specCommand,
                 files: liveFiles
               });
 

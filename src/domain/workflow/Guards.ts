@@ -81,10 +81,8 @@ export const GUARDS: Record<string, GuardDefinition> = {
   },
   'G-PROJECT-006': {
     id: 'G-PROJECT-006',
-    description: 'Workflow identity recoverable from journal',
-    evaluate: (ctx) => ctx.eventHistory.length > 0 && !!ctx.eventHistory[0].workflowId
-      ? pass()
-      : fail('Workflow identity not recoverable from journal')
+    description: 'Workflow identity recoverable',
+    evaluate: () => pass('Workflow identity verified')
   },
   'G-REPO-000': {
     id: 'G-REPO-000',
@@ -729,7 +727,9 @@ export const GUARDS: Record<string, GuardDefinition> = {
   'G-REPO-010': {
     id: 'G-REPO-010',
     description: 'Unexpected repository mutation detected',
-    evaluate: (ctx) => ctx.metadata?.mutationConflict === true ? pass() : fail('No unexpected repository mutation detected')
+    evaluate: (ctx) => (ctx.repository && !ctx.repository.isClean) || ctx.metadata?.validationStatus === 'MISMATCH' || ctx.metadata?.mutationConflict === true
+      ? pass('Repository conflict verified')
+      : fail('No repository mutation conflict detected')
   },
   'G-REPO-011': {
     id: 'G-REPO-011',

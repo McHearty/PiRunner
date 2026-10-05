@@ -1,0 +1,90 @@
+{
+  "CONCEPT": {
+    "canonicalRole": "CONCEPT",
+    "id": "5650",
+    "name": "Luminous Genesis",
+    "emotion": "Luminous",
+    "descriptor": "Genesis",
+    "roleDescription": "Concept Development Specialist"
+  },
+  "SPECIFICATION": {
+    "canonicalRole": "SPECIFICATION",
+    "id": "6215",
+    "name": "Lucid Codex",
+    "emotion": "Lucid",
+    "descriptor": "Codex",
+    "roleDescription": "Master Specification Specialist"
+  },
+  "PLANNING": {
+    "canonicalRole": "PLANNING",
+    "id": "2103",
+    "name": "Keen Scheduler",
+    "emotion": "Keen",
+    "descriptor": "Scheduler",
+    "roleDescription": "Planning & Sprint Decomposition Specialist"
+  },
+  "KNOWLEDGE": {
+    "canonicalRole": "KNOWLEDGE",
+    "id": "7432",
+    "name": "Insightful Synapse",
+    "emotion": "Insightful",
+    "descriptor": "Synapse",
+    "roleDescription": "Knowledge Provider Specialist"
+  },
+  "TEST_AUTHORING": {
+    "canonicalRole": "TEST_AUTHORING",
+    "id": "6545",
+    "name": "Tenacious Assertion",
+    "emotion": "Tenacious",
+    "descriptor": "Assertion",
+    "roleDescription": "Authoritative Test Authoring Specialist"
+  },
+  "IMPLEMENTATION": {
+    "canonicalRole": "IMPLEMENTATION",
+    "id": "9578",
+    "name": "Creative Foundry",
+    "emotion": "Creative",
+    "descriptor": "Foundry",
+    "roleDescription": "Primary Implementation Specialist"
+  },
+  "TRIAGE": {
+    "canonicalRole": "TRIAGE",
+    "id": "1203",
+    "name": "Steadfast Diagnostic",
+    "emotion": "Steadfast",
+    "descriptor": "Diagnostic",
+    "roleDescription": "Dedicated Triage & Diagnosis Specialist"
+  },
+  "REVIEW": {
+    "canonicalRole": "REVIEW",
+    "id": "5547",
+    "name": "Judicious Prism",
+    "emotion": "Judicious",
+    "descriptor": "Prism",
+    "roleDescription": "Primary Review Specialist"
+  },
+  "DEVLOG": {
+    "canonicalRole": "DEVLOG",
+    "id": "3740",
+    "name": "Reflective Historian",
+    "emotion": "Reflective",
+    "descriptor": "Historian",
+    "roleDescription": "Daily Development Record Specialist"
+  },
+  "SKILL_ARCHITECT": {
+    "canonicalRole": "SKILL_ARCHITECT",
+    "id": "2627",
+    "name": "Inventive Pattern",
+    "emotion": "Inventive",
+    "descriptor": "Pattern",
+    "roleDescription": "Skill Synthesis & Anti-Proliferation Specialist"
+  },
+  "PUBLICATION": {
+    "canonicalRole": "PUBLICATION",
+    "id": "8917",
+    "name": "Dynamic Signal",
+    "emotion": "Dynamic",
+    "descriptor": "Signal",
+    "roleDescription": "Publication Preparation Specialist"
+  }
+}

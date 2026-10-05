@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { execSync } from 'node:child_process';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { WorkflowController } from './application/WorkflowController.js';
 import { ArtifactValidator } from './domain/artifacts/ArtifactValidator.js';
@@ -19,6 +20,10 @@ import { TestSuiteLock } from './domain/testing/TestSuiteLock.js';
 import { ArtifactIngestionService } from './domain/artifacts/ArtifactIngestion.js';
 import { getAllowedTargetStates } from './domain/workflow/WorkflowTransition.js';
 import { AgentRosterService, CanonicalRole, AgentRosterEntry } from './domain/agents/AgentIdentity.js';
+import { GitKnowledgeProvider } from './infrastructure/knowledge/GitKnowledgeProvider.js';
+import { AGENT_TASK_CATALOG } from './domain/agents/AgentTaskCatalog.js';
+import { PathCapabilityEnforcer } from './domain/repository/PathCapability.js';
+import { ARTIFACT_SKELETONS } from './domain/artifacts/ArtifactSkeletons.js';
 
 export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   const root = process.cwd();
@@ -28,12 +33,14 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   const testRunner = new RealDeterministicTestRunner(root, artifactStore as any);
   const agentRunner = new PiAgentRunner(root);
   const gitRepo = new GitRepository(root);
+  const knowledgeProvider = new GitKnowledgeProvider(root);
 
   let roster = AgentRosterService.getOrGenerateRoster(root);
   const workflowId = 'pirunner-canonical';
-  const discovery = ProjectDiscoveryService.inspect(root);
+  let discovery = ProjectDiscoveryService.inspect(root);
+  let cachedPiInitialPrompt: string | null = null;
 
-  const controller = new WorkflowController(
+  let controller = new WorkflowController(
     workflowId,
     artifactStore as any,
     eventStore as any,
@@ -44,6 +51,24 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     gitRepo,
     root
   );
+
+  function syncAgentToState(state: WorkflowState): string {
+    const roleMap: Record<string, CanonicalRole> = {
+      CONCEPT: 'CONCEPT',
+      SPECIFICATION: 'SPECIFICATION',
+      PLANNING: 'PLANNING',
+      KNOWLEDGE_SYNC: 'KNOWLEDGE',
+      TEST_AUTHORING: 'TEST_AUTHORING',
+      IMPLEMENTATION: 'IMPLEMENTATION',
+      TRIAGE: 'TRIAGE',
+      REVIEW: 'REVIEW',
+      DIARY: 'DEVLOG',
+      SKILL_SYNTHESIS: 'SKILL_ARCHITECT',
+      PUBLICATION_READY: 'PUBLICATION'
+    };
+    const canonicalRole = roleMap[state] || 'CONCEPT';
+    return roster[canonicalRole].id;
+  }
 
   function getActiveAgentEntry(state: WorkflowState): AgentRosterEntry {
     const roleMap: Record<string, CanonicalRole> = {
@@ -83,7 +108,8 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   function getTargetTransitionForArtifact(state: WorkflowState, artifactType: string): WorkflowState | null {
     if (state === 'CONCEPT' && artifactType === 'ConceptPackage') return 'CONCEPT_REVIEW';
     if (state === 'SPECIFICATION' && artifactType === 'MasterSpecification') return 'SPECIFICATION_REVIEW';
-    if (state === 'PLANNING' && artifactType === 'SprintSpecification') return 'KNOWLEDGE_SYNC';
+    if (state === 'KNOWLEDGE_SYNC' && artifactType === 'KnowledgeSnapshot') return 'PLANNING';
+    if (state === 'PLANNING' && artifactType === 'SprintSpecification') return 'SPRINT_READY';
     if (state === 'TEST_AUTHORING' && artifactType === 'TestSpecification') return 'TEST_READY';
     if (state === 'IMPLEMENTATION' && artifactType === 'ImplementationResult') return 'COMMIT_CREATED';
     if (state === 'SKILL_SYNTHESIS' && artifactType === 'SkillPackage') return 'PLANNING';
@@ -99,117 +125,458 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   }
 
+  function buildRoleWrappedPrompt(promptText: string, state: WorkflowState): string {
+    const agent = getActiveAgentEntry(state);
+    const expectedType = getExpectedArtifactForState(state);
+    const skeleton = expectedType && ARTIFACT_SKELETONS[expectedType] ? ARTIFACT_SKELETONS[expectedType] : '';
+
+    let roleGuidance = '';
+    if (state === 'PLANNING') {
+      roleGuidance = `
+ROLE DIRECTIVE: You are strictly ${AgentRosterService.formatBadge(agent)} (Planning Specialist).
+The Knowledge Synchronization phase is FINISHED. You are NO LONGER the Knowledge Specialist.
+Do NOT write code or edit files. You have NO permission to edit files.
+Your ONLY job is to take the user's request and formulate a SprintSpecification JSON artifact.
+Decompose the user's intent into sprint goals, tasks for Confident Forge, and acceptance criteria for Methodical Scribe.`;
+    } else if (state === 'TEST_AUTHORING') {
+      roleGuidance = `
+ROLE DIRECTIVE: You are strictly ${AgentRosterService.formatBadge(agent)} (Test Authoring Specialist).
+Author acceptance tests in tests/** only. You are strictly forbidden from writing to src/**.`;
+    } else if (state === 'IMPLEMENTATION') {
+      roleGuidance = `
+ROLE DIRECTIVE: You are strictly ${AgentRosterService.formatBadge(agent)} (Implementation Specialist).
+Implement production code in src/** to pass the locked test suite. Authoritative tests are read-only.`;
+    }
+
+    const deliverableInstruction = expectedType
+      ? `\nDELIVERABLE REQUIREMENT:\nConclude your response with a valid, complete JSON code block for ${expectedType} matching this exact skeleton:\n${skeleton}\n`
+      : '';
+
+    return `================================================================================
+ACTIVE AGENT: ${AgentRosterService.formatBadge(agent)} [STATE: ${state}]
+${roleGuidance}
+================================================================================
+
+User Instruction:
+${promptText}
+${deliverableInstruction}`;
+  }
+
+  async function dispatchTurnToModel(promptText: string, ctx?: ExtensionContext): Promise<void> {
+    const state = controller.getState();
+    const wrappedPrompt = buildRoleWrappedPrompt(promptText, state);
+
+    try {
+      if (typeof (pi as any).sendUserMessage === 'function') {
+        await (pi as any).sendUserMessage(wrappedPrompt, { deliverAs: 'followUp' });
+      } else if (typeof (pi as any).sendMessage === 'function') {
+        await (pi as any).sendMessage(
+          { content: [{ type: 'text', text: wrappedPrompt }] },
+          { deliverAs: 'followUp', triggerTurn: true }
+        );
+      } else if (ctx) {
+        ctx.ui.notify(`[PiRunner]: Prompt ready. Press enter in chat to begin.`, 'info');
+      }
+    } catch (err: any) {
+      if (ctx) {
+        ctx.ui.notify(`[PiRunner Dispatch]: ${err.message}`, 'warning');
+      }
+    }
+  }
+
   function getRealDependencyLockHash(): string {
-    const lockPath = join(root, 'package-lock.json');
-    if (existsSync(lockPath)) {
-      return createHash('sha256').update(readFileSync(lockPath)).digest('hex');
+    const candidates = ['package-lock.json', 'gradle.lockfile', 'pom.xml', 'Cargo.lock'];
+    for (const c of candidates) {
+      const p = join(root, c);
+      if (existsSync(p)) {
+        return createHash('sha256').update(readFileSync(p)).digest('hex');
+      }
     }
     return createHash('sha256').update('no-lockfile-available').digest('hex');
   }
 
-  // Startup Pipeline
-  if (controller.getState() === 'PROJECT_DISCOVERY') {
-    if (discovery.entryMode === 'RESUME_WORKFLOW') {
-      const recovery = StateRecoveryService.recover(eventStore as any, workflowId);
-      const validation = StateValidationService.validate(recovery, discovery.repositorySnapshot, artifactStore as any, root);
+  // Interactive Agent Handoff & Task Selection Modal
+  async function promptAgentHandoff(newAgent: AgentRosterEntry, newState: WorkflowState, ctx: ExtensionContext) {
+    updateFooterStatus(ctx);
+    const badge = AgentRosterService.formatBadge(newAgent);
+    const tasks = AGENT_TASK_CATALOG[newAgent.canonicalRole] || [];
 
-      controller.transition('STATE_RECOVERY', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'RESUME_WORKFLOW' } })
-        .then(() => controller.transition('STATE_VALIDATION', { actorType: 'SYSTEM', actorId: '0000' }))
-        .then(() => {
-          if (validation.status === 'MATCH') {
-            return controller.transition(recovery.canonicalState, { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MATCH' } });
-          } else {
-            return controller.transition('REPOSITORY_CONFLICT', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MISMATCH' } });
-          }
-        })
-        .catch(async (err) => {
-          console.error('[PiRunner Startup Resume Failure]:', err.message);
-          await controller.transition('AGENT_FAILED', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { unrecoverable: true, startupError: err.message } }).catch(() => {});
-        });
-    } else if (discovery.entryMode === 'ADOPT_EXISTING_PROJECT') {
-      controller.transition('PROJECT_INTAKE', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' } })
-        .then(() => {
-          const baseline = ProjectIntakeService.createBaselineArtifact(workflowId, discovery.repositorySnapshot, gitRepo, root);
-          artifactStore.save(baseline);
-          return controller.transition('PROJECT_BASELINE', { actorType: 'SYSTEM', actorId: '0000' });
-        })
-        .then(() => controller.transition('KNOWLEDGE_SYNC', { actorType: 'SYSTEM', actorId: '0000' }))
-        .then(() => controller.transition('PLANNING', { actorType: 'SYSTEM', actorId: '0000' }))
-        .catch(async (err) => {
-          console.error('[PiRunner Adoption Failure]:', err.message);
-          await controller.transition('AGENT_FAILED', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { unrecoverable: true, adoptionError: err.message } }).catch(() => {});
-        });
+    const options = [
+      ...tasks.map((t, idx) => `${idx + 1}. ${t}`),
+      'Other: Custom task or natural conversation'
+    ];
+
+    let selected: string | undefined;
+    if (typeof (ctx.ui as any).select === 'function') {
+      selected = await (ctx.ui as any).select(
+        `Handoff to ${badge} [${newState}] — Select Task:`,
+        options
+      );
+    }
+
+    if (selected && !selected.startsWith('Other')) {
+      const taskText = selected.replace(/^\d+\.\s*/, '');
+      ctx.ui.notify(`Dispatching ${badge}: "${taskText}"`, 'info');
+      await dispatchTurnToModel(taskText, ctx);
+    } else if (selected && selected.startsWith('Other')) {
+      if (typeof (ctx.ui as any).input === 'function') {
+        const customPrompt = await (ctx.ui as any).input(
+          `Custom Task for ${badge} [${newState}]`,
+          'Enter custom goal or prompt (e.g. "Update documentation and create commit")'
+        );
+        if (customPrompt && customPrompt.trim()) {
+          await dispatchTurnToModel(customPrompt.trim(), ctx);
+          return;
+        }
+      }
+      ctx.ui.notify(`Chat naturally with ${badge} in the prompt below.`, 'info');
+    } else {
+      ctx.ui.notify(`Active agent is now ${badge}. Chat naturally below or use /hitm-tasks.`, 'info');
     }
   }
 
-  // 1. Natural Chat Persona Chaining (§1, §46-§48): Returns { systemPrompt } per Pi Extension API specification
+  // Robust, Immediate Conflict Resolution Modal (§9, §54)
+  async function promptConflictResolution(ctx: ExtensionContext) {
+    const uncommitted = gitRepo.getUncommittedFiles();
+
+    const options = [
+      'PRESERVE: Record uncommitted files as baseline and advance to KNOWLEDGE_SYNC',
+      'STASH: Stash uncommitted changes (git stash) and resume',
+      'RESET: Discard changes (git reset --hard) and resume',
+      'ABORT: Abort workflow and freeze automated operations'
+    ];
+
+    let choice: string | undefined;
+    if (typeof (ctx.ui as any).select === 'function') {
+      choice = await (ctx.ui as any).select(
+        `Repository Conflict: ${uncommitted.length} uncommitted file(s) detected`,
+        options
+      );
+    } else {
+      const confirmPreserve = await ctx.ui.confirm(
+        'Repository Conflict: Dirty Working Tree',
+        `${uncommitted.length} uncommitted file(s) detected.\nPreserve as baseline and advance to KNOWLEDGE_SYNC?`
+      );
+      choice = confirmPreserve ? options[0] : options[3];
+    }
+
+    if (!choice || choice.startsWith('ABORT')) {
+      await controller.transition('ABORT', { actorType: 'HUMAN', actorId: 'lead-human' }, { humanApproved: true });
+      ctx.ui.notify('Workflow frozen in [ABORT].', 'warning');
+      return;
+    }
+
+    if (choice.startsWith('PRESERVE')) {
+      ctx.ui.notify(`Preserving ${uncommitted.length} file(s) in baseline. Transitioning to KNOWLEDGE_SYNC...`, 'info');
+      
+      // Cleanly reset any interrupted journal lines so adoption sequence begins cleanly at 0
+      eventStore.resetJournal();
+      controller = new WorkflowController(
+        workflowId,
+        artifactStore as any,
+        eventStore as any,
+        testRunner,
+        agentRunner,
+        {},
+        'PROJECT_DISCOVERY',
+        gitRepo,
+        root
+      );
+
+      const freshSnap = gitRepo.getFreshSnapshot();
+
+      await controller.transition('PROJECT_INTAKE', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' } });
+
+      const baseline = ProjectIntakeService.createBaselineArtifact(workflowId, freshSnap, gitRepo, root);
+      baseline.payload.workingTreeState = 'DIRTY';
+      baseline.payload.detectedUncommittedChanges = uncommitted;
+      artifactStore.save(baseline);
+
+      await controller.transition('PROJECT_BASELINE', { actorType: 'SYSTEM', actorId: '0000' });
+      await controller.transition('KNOWLEDGE_SYNC', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { preserveDirty: true } });
+
+      updateFooterStatus(ctx);
+
+      const knowledgeAgent = getActiveAgentEntry('KNOWLEDGE_SYNC');
+      ctx.ui.notify(`Project baseline established with ${uncommitted.length} preserved file(s). State is now [KNOWLEDGE_SYNC].`, 'info');
+      await promptAgentHandoff(knowledgeAgent, 'KNOWLEDGE_SYNC', ctx);
+      return;
+    }
+
+    if (choice.startsWith('STASH')) {
+      try {
+        execSync('git stash', { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] });
+        ctx.ui.notify('Uncommitted changes stashed.', 'info');
+      } catch (err: any) {
+        ctx.ui.notify(`Failed to stash: ${err.message}`, 'error');
+        return;
+      }
+    } else if (choice.startsWith('RESET')) {
+      try {
+        execSync('git reset --hard HEAD', { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] });
+        ctx.ui.notify('Working tree reset to clean HEAD.', 'info');
+      } catch (err: any) {
+        ctx.ui.notify(`Failed to reset: ${err.message}`, 'error');
+        return;
+      }
+    }
+
+    discovery = ProjectDiscoveryService.inspect(root);
+    controller.setRepositorySnapshot(discovery.repositorySnapshot);
+
+    const recovery = StateRecoveryService.recover(eventStore as any, workflowId);
+    const validation = StateValidationService.validate(recovery, discovery.repositorySnapshot, artifactStore as any, root);
+
+    if (validation.status === 'MATCH') {
+      await controller.transition(recovery.canonicalState, { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MATCH' } });
+      ctx.ui.notify(`Conflict resolved. Resumed canonical state [${controller.getState()}].`, 'info');
+      const resumedAgent = getActiveAgentEntry(controller.getState());
+      await promptAgentHandoff(resumedAgent, controller.getState(), ctx);
+    } else {
+      ctx.ui.notify(`Conflict persists after resolution: ${validation.reasons.join(', ')}`, 'error');
+    }
+    updateFooterStatus(ctx);
+  }
+
+  // Active Tool Capability Sandbox
   if (typeof (pi as any).on === 'function') {
+    (pi as any).on('tool_call', async (event: any) => {
+      const currentState = controller.getState();
+      const currentAgent = getActiveAgentEntry(currentState);
+      const toolName = event.toolName;
+      const input = event.input || event.args || {};
+
+      if (toolName === 'write' || toolName === 'edit') {
+        const filePath = (input.path || input.filePath || '') as string;
+        const allowed = PathCapabilityEnforcer.isWriteAllowed(currentAgent.canonicalRole, filePath);
+        if (!allowed) {
+          const directive = PathCapabilityEnforcer.getRoleDirective(currentAgent.canonicalRole);
+          return {
+            block: true,
+            reason: `[HITM Role Violation]: Action blocked. ${directive}\nYou are forbidden from writing to "${filePath}". Scratch files may only be saved in .hitm/tmp/ if permitted.`
+          };
+        }
+      }
+
+      if (toolName === 'bash' || toolName === 'exec' || toolName === 'shell') {
+        const cmd = (input.command || input.cmd || '') as string;
+        const sanitizedCmd = cmd
+          .replace(/2>\s*\/dev\/null/g, '')
+          .replace(/>\s*\/dev\/null/g, '')
+          .replace(/&>\s*\/dev\/null/g, '');
+
+        const isReadOnlyRole = ['CONCEPT', 'SPECIFICATION', 'PLANNING', 'TRIAGE', 'REVIEW', 'DEVLOG', 'PUBLICATION'].includes(currentAgent.canonicalRole);
+        if (isReadOnlyRole && (sanitizedCmd.includes('>') || sanitizedCmd.includes('tee ') || sanitizedCmd.includes('touch ') || sanitizedCmd.includes('cp ') || sanitizedCmd.includes('mv '))) {
+          const directive = PathCapabilityEnforcer.getRoleDirective(currentAgent.canonicalRole);
+          return {
+            block: true,
+            reason: `[HITM Role Violation]: Shell file mutation blocked. ${directive}`
+          };
+        }
+
+        if (
+          cmd.includes('git push') ||
+          cmd.includes('git reset --hard') ||
+          cmd.includes('git checkout -f') ||
+          cmd.includes('rm -rf src') ||
+          cmd.includes('rm -rf tests')
+        ) {
+          return {
+            block: true,
+            reason: `[HITM Authority Violation]: Agent ${AgentRosterService.formatBadge(currentAgent)} is forbidden from executing destructive command: '${cmd}'.`
+          };
+        }
+      }
+    });
+
+    // 1. Hook session_start: Immediate check on startup/reload
+    (pi as any).on('session_start', async (_event: any, ctx: ExtensionContext) => {
+      updateFooterStatus(ctx);
+
+      // Direct check: if repository is dirty, prompt immediately (§9, §54)
+      if (!discovery.repositorySnapshot.isClean) {
+        await promptConflictResolution(ctx);
+        return;
+      }
+
+      if (controller.getState() === 'PROJECT_DISCOVERY') {
+        if (discovery.entryMode === 'RESUME_WORKFLOW') {
+          const recovery = StateRecoveryService.recover(eventStore as any, workflowId);
+          const validation = StateValidationService.validate(recovery, discovery.repositorySnapshot, artifactStore as any, root);
+
+          if (!recovery.recovered || validation.status === 'MISMATCH') {
+            await promptConflictResolution(ctx);
+          } else {
+            await controller.transition('STATE_RECOVERY', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'RESUME_WORKFLOW' } });
+            await controller.transition('STATE_VALIDATION', { actorType: 'SYSTEM', actorId: '0000' });
+            await controller.transition(recovery.canonicalState, { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MATCH' } });
+            ctx.ui.notify(`Resumed canonical workflow state [${controller.getState()}].`, 'info');
+            const agent = getActiveAgentEntry(controller.getState());
+            await promptAgentHandoff(agent, controller.getState(), ctx);
+          }
+        } else if (discovery.entryMode === 'ADOPT_EXISTING_PROJECT') {
+          await controller.transition('PROJECT_INTAKE', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' } });
+          const baseline = ProjectIntakeService.createBaselineArtifact(workflowId, discovery.repositorySnapshot, gitRepo, root);
+          artifactStore.save(baseline);
+          await controller.transition('PROJECT_BASELINE', { actorType: 'SYSTEM', actorId: '0000' });
+          await controller.transition('KNOWLEDGE_SYNC', { actorType: 'SYSTEM', actorId: '0000' });
+
+          updateFooterStatus(ctx);
+          const knowledgeAgent = getActiveAgentEntry('KNOWLEDGE_SYNC');
+          ctx.ui.notify('Adopted existing repository. State is [KNOWLEDGE_SYNC].', 'info');
+          await promptAgentHandoff(knowledgeAgent, 'KNOWLEDGE_SYNC', ctx);
+        }
+      }
+
+      updateFooterStatus(ctx);
+    });
+
+    // 2. Hook before_agent_start: Inject active role persona
     (pi as any).on('before_agent_start', async (event: any, ctx: ExtensionContext) => {
       updateFooterStatus(ctx);
       const state = controller.getState();
+
+      if (state === 'REPOSITORY_CONFLICT') {
+        await promptConflictResolution(ctx);
+        return;
+      }
+
       const agent = getActiveAgentEntry(state);
       const expectedType = getExpectedArtifactForState(state);
 
-      const prompt = AgentPromptFactory.createAgentSystemPrompt(agent.canonicalRole);
-      const instruction = expectedType
-        ? `\nActive Workflow State: [${state}]. Your current role: ${AgentRosterService.formatBadge(agent)}. Output must include valid JSON for ${expectedType}.`
-        : `\nActive Workflow State: [${state}]. Your current role: ${AgentRosterService.formatBadge(agent)}.`;
+      if (cachedPiInitialPrompt === null && event?.systemPrompt) {
+        cachedPiInitialPrompt = event.systemPrompt.split('Inference Governance and Engineering Reasoning System Prompt')[0].trim();
+      }
+      const cleanBase = cachedPiInitialPrompt !== null ? cachedPiInitialPrompt : '';
 
-      const base = event?.systemPrompt ? `${event.systemPrompt}\n` : '';
+      const prompt = AgentPromptFactory.createAgentSystemPrompt(agent.canonicalRole);
+      const skeleton = expectedType && ARTIFACT_SKELETONS[expectedType] ? ARTIFACT_SKELETONS[expectedType] : '';
+
+      const handoffNotice = `
+================================================================================
+CRITICAL IDENTITY & WORKFLOW BOUNDARY:
+Current Workflow State: [${state}]
+Active Specialized Agent: ${AgentRosterService.formatBadge(agent)} (${agent.roleDescription})
+
+ATTENTION:
+Regardless of what character, task, or role was discussed in previous messages,
+you are NOW strictly ${AgentRosterService.formatBadge(agent)}.
+Do NOT speak, act, or identify as any previous specialist (e.g. you are NOT the Knowledge Specialist).
+You have ZERO state transition authority. Transitions are strictly governed by PiRunner framework dialogs.
+================================================================================
+`;
+
+      const instruction = expectedType
+        ? `\nDeliverable: Output a complete, valid JSON code block for ${expectedType} matching this skeleton:\n${skeleton}\n`
+        : '';
+
       return {
-        systemPrompt: `${base}${prompt}${instruction}`
+        systemPrompt: `${cleanBase}\n\n${handoffNotice}\n\n${prompt}${instruction}`
       };
     });
 
-    // 2. Natural Chat Turn-End Interception
-    (pi as any).on('turn_end', async (event: any, ctx: ExtensionContext) => {
+    // 3. Hook agent_end: Ingests Artifacts with Error Transparency
+    (pi as any).on('agent_end', async (event: any, ctx: ExtensionContext) => {
       updateFooterStatus(ctx);
       const currentState = controller.getState();
+      const currentAgent = getActiveAgentEntry(currentState);
       const expectedType = getExpectedArtifactForState(currentState);
-      const agent = getActiveAgentEntry(currentState);
 
       if (!expectedType) return;
 
-      const rawText = typeof event?.message?.content === 'string'
-        ? event.message.content
-        : Array.isArray(event?.message?.content)
-          ? event.message.content.map((b: any) => b.text || '').join('\n')
-          : '';
+      let rawText = '';
+      if (Array.isArray(event?.messages)) {
+        const assistantMsgs = event.messages.filter((m: any) => m.role === 'assistant');
+        if (assistantMsgs.length > 0) {
+          const last = assistantMsgs[assistantMsgs.length - 1];
+          if (typeof last.content === 'string') {
+            rawText = last.content;
+          } else if (Array.isArray(last.content)) {
+            rawText = last.content
+              .filter((c: any) => c.type === 'text')
+              .map((c: any) => c.text || '')
+              .join('\n');
+          }
+        }
+      }
+
+      if (!rawText && typeof (ctx as any).session?.getLastAssistantText === 'function') {
+        rawText = (ctx as any).session.getLastAssistantText() || '';
+      }
+      if (!rawText && typeof event?.message?.content === 'string') {
+        rawText = event.message.content;
+      }
 
       if (!rawText) return;
 
       const ingestion = ArtifactIngestionService.ingestFromExecution(
-        { invocationId: `turn-${Date.now()}`, status: 'COMPLETED', rawOutput: rawText },
+        { invocationId: `run-${Date.now()}`, status: 'COMPLETED', rawOutput: rawText },
         expectedType,
         workflowId,
         `task-${currentState}`,
-        agent.id,
+        currentAgent.canonicalRole,
         validator,
         artifactStore as any
       );
 
+      // CASE A: Model produced valid JSON artifact -> Immediate HITM promotion modal
       if (ingestion.success && ingestion.artifact) {
         const target = getTargetTransitionForArtifact(currentState, expectedType);
         if (target) {
           const confirmed = await ctx.ui.confirm(
             'HITM Step Authorization',
-            `${AgentRosterService.formatBadge(agent)} completed ${expectedType}.\nAuthorize transition to [${target}]?`
+            `${AgentRosterService.formatBadge(currentAgent)} completed ${expectedType}.\nAuthorize transition from [${currentState}] to [${target}]?`
           );
           if (confirmed) {
             try {
-              await controller.transition(target, { actorType: 'AGENT', actorId: agent.id }, { artifactIds: [ingestion.artifact.artifactId] });
+              await controller.transition(target, { actorType: 'AGENT', actorId: currentAgent.id }, { artifactIds: [ingestion.artifact.artifactId] });
               updateFooterStatus(ctx);
               ctx.ui.notify(`State advanced to [${controller.getState()}]`, 'info');
+
+              const nextAgent = getActiveAgentEntry(controller.getState());
+              if (nextAgent.canonicalRole !== currentAgent.canonicalRole) {
+                await promptAgentHandoff(nextAgent, controller.getState(), ctx);
+              }
             } catch (err: any) {
-              ctx.ui.notify(`Transition rejected: ${err.message}`, 'error');
+              ctx.ui.notify(`Transition guard rejected: ${err.message}`, 'error');
             }
           }
         }
+        return;
+      }
+
+      // CASE B: Conversational response without artifact -> Human-In-The-Middle Confirmation
+      const promptToFormalize = await ctx.ui.confirm(
+        'Artifact Pending',
+        `${AgentRosterService.formatBadge(currentAgent)} responded without a ${expectedType} JSON artifact.\nPrompt ${currentAgent.name} to formalize the discussion into ${expectedType} now?`
+      );
+
+      if (promptToFormalize) {
+        await dispatchTurnToModel(
+          `Formalize our discussion into the required ${expectedType} JSON artifact code block now matching its schema.`,
+          ctx
+        );
       }
     });
   }
 
-  // Interactive Commands
+  // Interactive Slash Commands
+  pi.registerCommand('hitm-tasks', {
+    description: 'Open the task catalog for the currently active agent',
+    handler: async (_args: string, ctx: ExtensionContext) => {
+      const state = controller.getState();
+      const agent = getActiveAgentEntry(state);
+      await promptAgentHandoff(agent, state, ctx);
+    }
+  });
+
+  pi.registerCommand('hitm-conflict', {
+    description: 'Interactively resolve an active repository conflict (stash, reset, preserve, abort)',
+    handler: async (_args: string, ctx: ExtensionContext) => {
+      await promptConflictResolution(ctx);
+    }
+  });
+
   pi.registerCommand('hitm-status', {
     description: 'Display current state, active [ID NAME] agent, and legal next transitions',
     handler: async (_args: string, ctx: ExtensionContext) => {
@@ -246,6 +613,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     description: 'Authorize and execute next state transition as Human Authority',
     handler: async (targetState: string, ctx: ExtensionContext) => {
       const currentState = controller.getState();
+      const oldAgent = getActiveAgentEntry(currentState);
       const legalNext = getAllowedTargetStates(currentState).filter(
         s => !['ARTIFACT_INVALID', 'REPOSITORY_CONFLICT', 'ABORT', 'AGENT_FAILED'].includes(s)
       );
@@ -275,6 +643,10 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
           updateFooterStatus(ctx);
           const newAgent = getActiveAgentEntry(controller.getState());
           ctx.ui.notify(`State advanced to [${controller.getState()}] | Active: ${AgentRosterService.formatBadge(newAgent)}`, 'info');
+
+          if (newAgent.canonicalRole !== oldAgent.canonicalRole) {
+            await promptAgentHandoff(newAgent, controller.getState(), ctx);
+          }
         } catch (err: any) {
           ctx.ui.notify(`Transition rejected: ${err.message}`, 'error');
         }
@@ -305,7 +677,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
           testSuiteContentHash: expectedHash,
           repositoryRevision: freshSnap.headSha,
           dependencyLockHash: depLockHash,
-          executionCommand: 'npm test'
+          executionCommand: (testSpec?.payload as any)?.executionCommand || 'npm test'
         });
 
         if (result.status === 'PASSED') {

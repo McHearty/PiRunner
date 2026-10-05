@@ -3,7 +3,7 @@ import { PathCapabilityEnforcer } from '../../domain/repository/PathCapability.j
 import { AgentPromptFactory } from '../../agents/AgentPrompts.js';
 
 export interface PiSessionLike {
-  prompt(text: string): Promise<void>;
+  prompt(text: string, options?: { streamingBehavior?: "steer" | "followUp" }): Promise<void>;
   abort(): Promise<void>;
   dispose(): Promise<void>;
   subscribe?: (callback: (event: any) => void) => void;
@@ -107,7 +107,7 @@ export class PiAgentRunner implements AgentRunner {
         onToolCall: toolInterceptor
       });
       this.activeSessions.set(invocation.invocationId, session);
-      await session.prompt(invocation.prompt);
+      await session.prompt(invocation.prompt, { streamingBehavior: 'followUp' } as any);
 
       const lastText = typeof session.getLastAssistantText === 'function' ? session.getLastAssistantText() : '';
       const finalOutput = lastText || accumulatedOutput;
@@ -166,7 +166,7 @@ export class PiAgentRunner implements AgentRunner {
             });
           }
 
-          await session.prompt(invocation.prompt);
+          await session.prompt(invocation.prompt, { streamingBehavior: 'followUp' } as any);
 
           const lastText = typeof session.getLastAssistantText === 'function' ? session.getLastAssistantText() : '';
           const finalOutput = lastText || accumulatedOutput;

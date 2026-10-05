@@ -1,11 +1,11 @@
-import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { WorkflowEvent } from '../../domain/workflow/WorkflowEvent.js';
 import { SequenceOrderError } from '../../domain/workflow/WorkflowReducer.js';
 
 export class FileEventStore {
   private readonly filePath: string;
-  private readonly events: WorkflowEvent[] = [];
+  private events: WorkflowEvent[] = [];
 
   constructor(storageDir: string = join(process.cwd(), '.hitm')) {
     this.filePath = join(storageDir, 'events.jsonl');
@@ -17,11 +17,19 @@ export class FileEventStore {
 
   private loadFromDisk(): void {
     if (!existsSync(this.filePath)) return;
+    this.events = [];
     const lines = readFileSync(this.filePath, 'utf8').split('\n').filter(l => l.trim().length > 0);
     for (const line of lines) {
-      const event: WorkflowEvent = JSON.parse(line);
-      this.events.push(Object.freeze(event));
+      try {
+        const event: WorkflowEvent = JSON.parse(line);
+        this.events.push(Object.freeze(event));
+      } catch {}
     }
+  }
+
+  public resetJournal(): void {
+    this.events = [];
+    writeFileSync(this.filePath, '', 'utf8');
   }
 
   public append(event: WorkflowEvent): void {
@@ -31,7 +39,6 @@ export class FileEventStore {
       throw new SequenceOrderError(expectedSeq, event.sequence);
     }
 
-    // TRANSACTIONAL COMMIT BOUNDARY: Persist to disk FIRST before updating in-memory state
     appendFileSync(this.filePath, JSON.stringify(event) + '\n', 'utf8');
     this.events.push(Object.freeze({ ...event }));
   }

@@ -1,9 +1,9 @@
 ---
-name: review-implementation
+name: review-verification
 description: Review implementation commit against accepted specifications and test evidence
 role: REVIEW
 ---
-# Procedure: Review Implementation
+# Procedure: Review Verification
 1. Verify commit exists and inspect changed files.
 2. Verify deterministic `TestExecutionResult` passed with zero failures.
 3. Confirm all mandatory acceptance criteria are satisfied.

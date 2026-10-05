@@ -1,0 +1,118 @@
+{
+  "artifactId": "art-knowledgesnapshot-1791215294081",
+  "artifactType": "KnowledgeSnapshot",
+  "schemaVersion": "1.0.0",
+  "workflowId": "pirunner-canonical",
+  "taskId": "task-KNOWLEDGE_SYNC",
+  "agentId": "0048",
+  "createdAt": "2026-10-05T15:48:14.081Z",
+  "parentArtifactIds": [],
+  "sourceRefs": [
+    {
+      "type": "SESSION",
+      "identifier": "run-1791215294080"
+    }
+  ],
+  "status": "SUBMITTED",
+  "payload": {
+    "sourceRevision": "293ef0f",
+    "dependencyLockHash": "97c4bab5e9a3bfe277322fbb497191fdb2f7999f8fc68e8ad87aaacef9c77dc5",
+    "verifiedAt": "2026-10-05T13:15:00.000Z",
+    "freshnessPolicyVersion": "1.0.0",
+    "relevantSourceFiles": [
+      {
+        "path": "src/agents/AgentPrompts.ts",
+        "contentHash": "7a92c3b91519906e42f824bc45fb2c048335a1c44ef0d3ecd64860e9c2c8822c",
+        "language": "typescript"
+      },
+      {
+        "path": "src/domain/artifacts/ArtifactIngestion.ts",
+        "contentHash": "dcb2c88e97d4b6842ae47c1938ad9aa95301567c515c1b4a1c931dcd50483993",
+        "language": "typescript"
+      },
+      {
+        "path": "src/domain/artifacts/JsonExtractor.ts",
+        "contentHash": "5d2acb89ce477c0861af09b4801d3e041ee62ac04a4c01670aa9b9fab70ee824",
+        "language": "typescript"
+      },
+      {
+        "path": "src/domain/workflow/Guards.ts",
+        "contentHash": "fdaeaa4c20eb0264afb6145cd2f4777c6b10e75a08c401b3978bfa73271cdaf2",
+        "language": "typescript"
+      },
+      {
+        "path": "src/extension.ts",
+        "contentHash": "6fa7634291b231d2fb18ed351fc90619dd6aff934b3b2e0bcfa6776faaaacb57",
+        "language": "typescript"
+      },
+      {
+        "path": "src/infrastructure/knowledge/MultiEcosystemKnowledgeExtractor.ts",
+        "contentHash": "751c09e67f180eb6824026d1a42ae3c02621e3e6636bef7e216c2c8fc7c35775",
+        "language": "typescript"
+      }
+    ],
+    "relevantSymbols": [
+      {
+        "name": "JsonExtractor",
+        "kind": "class",
+        "location": {
+          "path": "src/domain/artifacts/JsonExtractor.ts",
+          "line": 1,
+          "column": 0
+        },
+        "exported": true
+      },
+      {
+        "name": "ArtifactIngestionService",
+        "kind": "class",
+        "location": {
+          "path": "src/domain/artifacts/ArtifactIngestion.ts",
+          "line": 14,
+          "column": 0
+        },
+        "exported": true
+      },
+      {
+        "name": "MultiEcosystemKnowledgeExtractor",
+        "kind": "class",
+        "location": {
+          "path": "src/infrastructure/knowledge/MultiEcosystemKnowledgeExtractor.ts",
+          "line": 1,
+          "column": 0
+        },
+        "exported": true
+      }
+    ],
+    "dependencies": [
+      {
+        "name": "ajv",
+        "version": "^8.12.0",
+        "resolved": "8.17.1",
+        "ecosystem": "npm",
+        "manifestPath": "package.json"
+      },
+      {
+        "name": "typescript",
+        "version": "^5.3.3",
+        "resolved": "5.9.3",
+        "ecosystem": "npm",
+        "manifestPath": "package.json"
+      },
+      {
+        "name": "vitest",
+        "version": "^2.0.0",
+        "resolved": "2.1.9",
+        "ecosystem": "npm",
+        "manifestPath": "package.json"
+      }
+    ],
+    "documentationRefs": [
+      {
+        "identifier": "TECHSPEC.md",
+        "title": "PiRunner Technical Specification",
+        "retrievedAt": "2026-10-05T13:15:00.000Z"
+      }
+    ],
+    "notes": "Incremental knowledge delta synchronized. 5 modified source files, 1 new source file (JsonExtractor), 1 modified test file. Skills reorganization in progress. Source revision unchanged at 293ef0f."
+  }
+}

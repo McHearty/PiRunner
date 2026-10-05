@@ -25,7 +25,7 @@ const g = (id: string): GuardDefinition => {
   return guard;
 };
 
-export const TRANSITION_REGISTRY: readonly TransitionDefinition[] = [
+export const TRANSITION_REGISTRY: TransitionDefinition[] = [
   // §24 Project Entry Transitions
   { id: 'T-000', from: 'PROJECT_DISCOVERY', to: 'CONCEPT', guards: [g('G-PROJECT-001'), g('G-PROJECT-002'), g('G-REPO-000')], sideEffects: [{ id: 'SE-EVT-000', description: 'NEW_PROJECT_INIT' }], humanApproval: 'NEVER' },
   { id: 'T-001A', from: 'PROJECT_DISCOVERY', to: 'PROJECT_INTAKE', guards: [g('G-PROJECT-003'), g('G-PROJECT-004'), g('G-REPO-000')], sideEffects: [{ id: 'SE-EVT-001A', description: 'ADOPT_INTAKE_STARTED' }], humanApproval: 'NEVER' },
@@ -47,8 +47,9 @@ export const TRANSITION_REGISTRY: readonly TransitionDefinition[] = [
   { id: 'T-021', from: 'SPECIFICATION_REVIEW', to: 'PLANNING', guards: [g('G-ART-013')], sideEffects: [{ id: 'SE-EVT-021', description: 'SPEC_ACCEPTED' }], humanApproval: 'ALWAYS' },
   { id: 'T-022', from: 'SPECIFICATION_REVIEW', to: 'HUMAN_GATE', guards: [g('G-ART-015')], sideEffects: [{ id: 'SE-EVT-022', description: 'SPEC_REJECTED' }], humanApproval: 'ALWAYS' },
 
-  // §27 Planning & Knowledge
+  // §27 Planning & Knowledge Path
   { id: 'T-030', from: 'PLANNING', to: 'KNOWLEDGE_SYNC', guards: [g('G-ART-020')], sideEffects: [{ id: 'SE-EVT-030', description: 'PLAN_SUBMITTED' }], humanApproval: 'NEVER' },
+  { id: 'T-030B', from: 'PLANNING', to: 'SPRINT_READY', guards: [g('G-ART-020'), g('G-ART-022')], sideEffects: [{ id: 'SE-EVT-030B', description: 'PLAN_APPROVED_SPRINT_READY' }], humanApproval: 'ALWAYS' },
   { id: 'T-031', from: 'KNOWLEDGE_SYNC', to: 'SPRINT_READY', guards: [g('G-ART-022')], sideEffects: [{ id: 'SE-EVT-031', description: 'KNOWLEDGE_VERIFIED' }], humanApproval: 'NEVER' },
   { id: 'T-032', from: 'KNOWLEDGE_SYNC', to: 'HUMAN_GATE', guards: [g('G-KNOW-005')], sideEffects: [{ id: 'SE-EVT-032', description: 'KNOWLEDGE_STALE' }], humanApproval: 'ON_LIMIT_EXCEEDED' },
 
@@ -100,11 +101,14 @@ export const TRANSITION_REGISTRY: readonly TransitionDefinition[] = [
   { id: 'T-096', from: 'PLANNING', to: 'SKILL_SYNTHESIS', guards: [g('G-ART-020')], sideEffects: [{ id: 'SE-EVT-096', description: 'DIRECT_SKILL_CURATION' }], humanApproval: 'ALWAYS' },
   { id: 'T-097', from: 'SKILL_SYNTHESIS', to: 'PLANNING', guards: [g('G-SKILL-001')], sideEffects: [{ id: 'SE-EVT-097', description: 'RETURN_TO_PLANNING' }], humanApproval: 'NEVER' },
 
-  // §38 Failure and Recovery
+  // §38 Failure, Conflict Resolution & Recovery Transitions
   { id: 'T-100', from: '*', to: 'ARTIFACT_INVALID', guards: [g('G-VAL-001')], sideEffects: [{ id: 'SE-EVT-100', description: 'VALIDATION_FAILED' }], humanApproval: 'NEVER' },
   { id: 'T-101', from: 'ARTIFACT_INVALID', to: 'HUMAN_GATE', guards: [g('G-CFG-006')], sideEffects: [{ id: 'SE-EVT-101', description: 'ARTIFACT_LIMIT' }], humanApproval: 'ON_LIMIT_EXCEEDED' },
   { id: 'T-102', from: '*', to: 'REPOSITORY_CONFLICT', guards: [g('G-REPO-010')], sideEffects: [{ id: 'SE-EVT-102', description: 'CONFLICT_FREEZE' }], humanApproval: 'NEVER' },
   { id: 'T-103', from: 'REPOSITORY_CONFLICT', to: 'HUMAN_GATE', guards: [g('G-REPO-011')], sideEffects: [{ id: 'SE-EVT-103', description: 'CONFLICT_ESCALATE' }], humanApproval: 'ALWAYS' },
+  { id: 'T-103A', from: 'REPOSITORY_CONFLICT', to: 'PROJECT_INTAKE', guards: [g('G-REPO-000')], sideEffects: [{ id: 'SE-EVT-103A', description: 'CONFLICT_RESOLVED_ADOPTION_PRESERVE' }], humanApproval: 'ALWAYS' },
+  { id: 'T-103B', from: 'REPOSITORY_CONFLICT', to: 'STATE_VALIDATION', guards: [g('G-REPO-000')], sideEffects: [{ id: 'SE-EVT-103B', description: 'CONFLICT_RESOLVED_RETRY_VALIDATION' }], humanApproval: 'ALWAYS' },
+  { id: 'T-103C', from: 'REPOSITORY_CONFLICT', to: 'KNOWLEDGE_SYNC', guards: [g('G-REPO-000')], sideEffects: [{ id: 'SE-EVT-103C', description: 'CONFLICT_RESOLVED_DIRECT_KNOWLEDGE' }], humanApproval: 'ALWAYS' },
   { id: 'T-104', from: 'AGENT_FAILED', to: 'TRIAGE', guards: [g('G-RUN-002')], sideEffects: [{ id: 'SE-EVT-104', description: 'AGENT_TRIAGE' }], humanApproval: 'NEVER' },
   { id: 'T-105', from: 'AGENT_FAILED', to: 'HUMAN_GATE', guards: [g('G-RUN-003')], sideEffects: [{ id: 'SE-EVT-105', description: 'AGENT_ESCALATE' }], humanApproval: 'ON_LIMIT_EXCEEDED' },
   { id: 'T-106', from: '*', to: 'ABORT', guards: [g('G-HUMAN-003')], sideEffects: [{ id: 'SE-EVT-106', description: 'WORKFLOW_ABORTED' }], humanApproval: 'ALWAYS' }

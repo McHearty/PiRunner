@@ -11,7 +11,7 @@ export class PathCapabilityEnforcer {
     CONCEPT: { canonicalRole: 'CONCEPT', readable: ['**/*'], writable: [] },
     SPECIFICATION: { canonicalRole: 'SPECIFICATION', readable: ['**/*'], writable: [] },
     PLANNING: { canonicalRole: 'PLANNING', readable: ['**/*'], writable: [] },
-    KNOWLEDGE: { canonicalRole: 'KNOWLEDGE', readable: ['**/*'], writable: [] },
+    KNOWLEDGE: { canonicalRole: 'KNOWLEDGE', readable: ['**/*'], writable: ['.hitm/tmp/**', '.hitm/knowledge/**', 'tmp/**'] },
     TEST_AUTHORING: { canonicalRole: 'TEST_AUTHORING', readable: ['**/*'], writable: ['test/**', 'tests/**', 'fixtures/**', 'test-config/**'] },
     IMPLEMENTATION: { canonicalRole: 'IMPLEMENTATION', readable: ['**/*'], writable: ['src/**', 'production-config/**'] },
     TRIAGE: { canonicalRole: 'TRIAGE', readable: ['**/*'], writable: [] },
@@ -23,17 +23,10 @@ export class PathCapabilityEnforcer {
 
   private static legacyIdToRole(agentId: string): CanonicalRole {
     const legacyMap: Record<string, CanonicalRole> = {
-      '0012': 'CONCEPT',
-      '0024': 'SPECIFICATION',
-      '0036': 'PLANNING',
-      '0048': 'KNOWLEDGE',
-      '0060': 'IMPLEMENTATION',
-      '0072': 'TRIAGE',
-      '0084': 'REVIEW',
-      '0096': 'DEVLOG',
-      '0108': 'PUBLICATION',
-      '0120': 'TEST_AUTHORING',
-      '0132': 'SKILL_ARCHITECT'
+      '0012': 'CONCEPT', '0024': 'SPECIFICATION', '0036': 'PLANNING',
+      '0048': 'KNOWLEDGE', '0060': 'IMPLEMENTATION', '0072': 'TRIAGE',
+      '0084': 'REVIEW', '0096': 'DEVLOG', '0108': 'PUBLICATION',
+      '0120': 'TEST_AUTHORING', '0132': 'SKILL_ARCHITECT'
     };
     if (legacyMap[agentId]) return legacyMap[agentId];
 
@@ -61,6 +54,7 @@ export class PathCapabilityEnforcer {
     const impl = this.ROLE_POLICIES['IMPLEMENTATION'];
     const triage = this.ROLE_POLICIES['TRIAGE'];
     const review = this.ROLE_POLICIES['REVIEW'];
+    const planning = this.ROLE_POLICIES['PLANNING'];
 
     if (!testAuthor || testAuthor.writable.some(w => w.startsWith('src/'))) {
       errors.push('TEST_AUTHORING capability policy permits unauthorized production write paths');
@@ -73,6 +67,9 @@ export class PathCapabilityEnforcer {
     }
     if (!review || review.writable.length > 0) {
       errors.push('REVIEW capability policy violates read-only invariant');
+    }
+    if (!planning || planning.writable.length > 0) {
+      errors.push('PLANNING capability policy violates read-only invariant');
     }
 
     return { valid: errors.length === 0, errors };
@@ -94,6 +91,27 @@ export class PathCapabilityEnforcer {
     return policy.writable.some(pattern => this.pathMatches(pattern, filePath));
   }
 
+  public static getRoleDirective(role: CanonicalRole): string {
+    switch (role) {
+      case 'PLANNING':
+        return 'You are the Planning Agent. You are strictly forbidden from writing or editing files. Your sole duty is to decompose tasks into a SprintSpecification JSON artifact for the Implementation Agent.';
+      case 'SPECIFICATION':
+        return 'You are the Specification Agent. You are strictly forbidden from writing files. Your sole duty is to formulate requirements into a MasterSpecification JSON artifact.';
+      case 'CONCEPT':
+        return 'You are the Concept Agent. You are strictly forbidden from writing files. Produce a ConceptPackage JSON artifact.';
+      case 'TEST_AUTHORING':
+        return 'You are the Test Authoring Agent. You may only write to tests/**. You are strictly forbidden from writing to src/**.';
+      case 'IMPLEMENTATION':
+        return 'You are the Implementation Agent. You may only write to src/**. Authoritative tests under tests/** are strictly read-only.';
+      case 'TRIAGE':
+        return 'You are the Triage Agent. You are strictly read-only. Classify failures into a TriageReport JSON artifact.';
+      case 'REVIEW':
+        return 'You are the Review Agent. You are strictly read-only. Evaluate evidence into a ReviewResult JSON artifact.';
+      default:
+        return 'You are in a read-only role. Do not attempt to write or edit files.';
+    }
+  }
+
   public static validateMutations(agentIdOrRole: string, changedFiles: string[]): { allowed: boolean; violations: string[] } {
     const violations: string[] = [];
     for (const file of changedFiles) {
@@ -101,9 +119,6 @@ export class PathCapabilityEnforcer {
         violations.push(file);
       }
     }
-    return {
-      allowed: violations.length === 0,
-      violations
-    };
+    return { allowed: violations.length === 0, violations };
   }
 }

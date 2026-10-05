@@ -13,11 +13,19 @@ import { GuardContext, RepositorySnapshot, GUARDS } from '../domain/workflow/Gua
 import { RepositoryPort } from '../domain/repository/RepositoryPort.js';
 import { GitRepository } from '../infrastructure/git/GitRepository.js';
 import { TestSuiteLock } from '../domain/testing/TestSuiteLock.js';
+import { CanonicalRole, AgentRosterService } from '../domain/agents/AgentIdentity.js';
 
 export class GuardCheckError extends Error {
   constructor(public readonly guardId: string, public readonly description: string, public readonly reason: string) {
     super(`Guard check failed [${guardId}]: ${reason} (${description})`);
     this.name = 'GuardCheckError';
+  }
+}
+
+export class AgentAuthorityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AgentAuthorityError';
   }
 }
 
@@ -28,6 +36,21 @@ export class WorkflowController {
   private readonly repository: RepositoryPort;
   private readonly workspaceRoot: string;
   private repositorySnapshot?: RepositorySnapshot;
+
+  // Normative Agent Authority Matrix (§26): Maps origin states to authorized actor roles
+  private static readonly STATE_AUTHORITY_MAP: Partial<Record<WorkflowState, CanonicalRole>> = {
+    CONCEPT: 'CONCEPT',
+    SPECIFICATION: 'SPECIFICATION',
+    PLANNING: 'PLANNING',
+    KNOWLEDGE_SYNC: 'KNOWLEDGE',
+    TEST_AUTHORING: 'TEST_AUTHORING',
+    IMPLEMENTATION: 'IMPLEMENTATION',
+    TRIAGE: 'TRIAGE',
+    REVIEW: 'REVIEW',
+    DIARY: 'DEVLOG',
+    SKILL_SYNTHESIS: 'SKILL_ARCHITECT',
+    PUBLICATION_READY: 'PUBLICATION'
+  };
 
   constructor(
     workflowId: string,
@@ -77,8 +100,22 @@ export class WorkflowController {
       throw new Error(`Illegal state transition from ${this.currentState} to ${targetState}`);
     }
 
+    // 1. Enforce Human Approval policy
     if (transitionDef.humanApproval === 'ALWAYS' && !options.humanApproved) {
       throw new Error(`Transition ${transitionDef.id} (${this.currentState} -> ${targetState}) mandates explicit human approval`);
+    }
+
+    // 2. Enforce Agent Authority Matrix (§26): Agents cannot act on behalf of other agents
+    if (actor.actorType === 'AGENT') {
+      const authorizedRole = WorkflowController.STATE_AUTHORITY_MAP[this.currentState];
+      if (authorizedRole) {
+        const callingRole = this.resolveAgentRole(actor.actorId);
+        if (callingRole !== authorizedRole) {
+          throw new AgentAuthorityError(
+            `Agent authority violation: Agent [${actor.actorId}] (${callingRole}) is forbidden from acting on behalf of [${authorizedRole}] in state [${this.currentState}]`
+          );
+        }
+      }
     }
 
     const freshRepoSnapshot = this.repository.getFreshSnapshot();
@@ -95,14 +132,15 @@ export class WorkflowController {
       eventHistory: this.eventStore.getEvents(this.workflowId),
       config: this.config,
       repository: effectiveRepo,
-      referencedArtifactIds: options.artifactIds,      workspaceRoot: this.workspaceRoot,
+      referencedArtifactIds: options.artifactIds,
+      workspaceRoot: this.workspaceRoot,
       metadata: {
         ...options.metadata,
         humanApproved: options.humanApproved === true
       }
     };
 
-    // FAIL CLOSED: Evaluate all guards; throw if guard or evaluator is missing (§21, §22)
+    // FAIL CLOSED: Evaluate all guards
     for (const guardDef of transitionDef.guards) {
       const activeGuard = GUARDS[guardDef.id];
       if (!activeGuard || !activeGuard.evaluate) {
@@ -124,7 +162,6 @@ export class WorkflowController {
         throw new Error('Cannot lock test suite: TestSpecification does not contain valid 64-char testSuiteContentHash');
       }
 
-      // Write lock into the controller workspace's .hitm directory
       TestSuiteLock.createLock(
         {
           workflowId: this.workflowId,
@@ -151,11 +188,36 @@ export class WorkflowController {
       metadata: options.metadata || {}
     };
 
-    // Transactional append: write durable journal FIRST, update memory ONLY on success
     this.eventStore.append(event);
     this.currentState = applyWorkflowEvent(this.currentState, event);
 
     return event;
+  }
+
+  private resolveAgentRole(agentId: string): CanonicalRole {
+    const roles: CanonicalRole[] = [
+      'CONCEPT', 'SPECIFICATION', 'PLANNING', 'KNOWLEDGE',
+      'TEST_AUTHORING', 'IMPLEMENTATION', 'TRIAGE', 'REVIEW',
+      'DEVLOG', 'SKILL_ARCHITECT', 'PUBLICATION'
+    ];
+    if (roles.includes(agentId as CanonicalRole)) {
+      return agentId as CanonicalRole;
+    }
+
+    try {
+      const roster = AgentRosterService.getOrGenerateRoster(this.workspaceRoot);
+      for (const entry of Object.values(roster)) {
+        if (entry.id === agentId) return entry.canonicalRole;
+      }
+    } catch {}
+
+    const legacyMap: Record<string, CanonicalRole> = {
+      '0012': 'CONCEPT', '0024': 'SPECIFICATION', '0036': 'PLANNING',
+      '0048': 'KNOWLEDGE', '0060': 'IMPLEMENTATION', '0072': 'TRIAGE',
+      '0084': 'REVIEW', '0096': 'DEVLOG', '0108': 'PUBLICATION',
+      '0120': 'TEST_AUTHORING', '0132': 'SKILL_ARCHITECT'
+    };
+    return legacyMap[agentId] || 'CONCEPT';
   }
 
   public executeAuthoritativeTests(request: Omit<TestExecutionRequest, 'workflowId'>): Promise<TestExecutionResultData> {

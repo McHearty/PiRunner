@@ -1,7 +1,7 @@
 # HITM-Orchestrated Multi-Agent Engineering Workflow
 ## Technical Implementation Specification
 
-**Version:** 1.3.0  
+**Version:** 1.3.1 (Normative Amendment)  
 **Status:** Normative  
 **Supersedes:** 1.2.0  
 **Date:** 2026-10-04  
@@ -583,7 +583,7 @@ Unexpected branches, detached HEAD state, or ambiguous repository ownership may 
 
 ## 11. Agent Topology
 
-Ten specialized agents exist in v1.3.0.
+Eleven specialized agents exist in v1.3.1.
 
 Each identifier is a four-digit number divisible by 12.
 
@@ -599,6 +599,7 @@ Each identifier is a four-digit number divisible by 12.
 | 0096 | Reflective Ledger | Daily Devlog |
 | 0108 | Inspired Signal | Publication Preparation |
 | 0120 | Methodical Scribe | Authoritative Test Authoring |
+| 0132 | Inventive Weaver | Skill Synthesis (Anti-Proliferation) |
 
 Names are identifiers only.
 
@@ -734,6 +735,24 @@ Produces:
 `PublicationPackage`
 
 Must not invent accomplishments.
+
+
+### 0132 — Inventive Weaver
+
+Skill Synthesis Specialist.
+
+Produces:
+
+`SkillPackage`
+
+Responsibilities:
+- coordinate with Daily Devlog Historian to synthesize recurring procedures into parameterized skills;
+- enforce the normative anti-proliferation invariant: procedure must possess >=3 verified real uses;
+- author and maintain skills in `skills/**` and `.pi/skills/**`.
+
+Must not:
+- memoize one-off unverified procedures;
+- modify production source or authoritative tests.
 
 ### 0120 — Methodical Scribe
 
@@ -940,6 +959,7 @@ SPRINT_COMPLETE
 
 DAY_COMPLETE
 DIARY
+SKILL_SYNTHESIS
 PUBLICATION_READY
 PUBLISHED
 ```
@@ -1105,7 +1125,7 @@ PiRunner must never silently reconcile mismatch.
 
 ## 21. Normative Transition Registry
 
-Every legal transition is explicitly enumerated.
+Every legal transition is explicitly enumerated across 86 executable transition guards.
 
 No other transitions are permitted.
 
@@ -2146,6 +2166,43 @@ HumanApproval:
 
 ---
 
+
+---
+
+**T-094** `DIARY → SKILL_SYNTHESIS`
+
+Guards:
+- G-EVT-001: relevant events available.
+
+HumanApproval: `NEVER`
+
+---
+
+**T-095** `SKILL_SYNTHESIS → PUBLICATION_READY`
+
+Guards:
+- G-SKILL-001: procedure has >=3 verified real uses in devlogs or events.
+
+HumanApproval: `ALWAYS`
+
+---
+
+**T-096** `PLANNING → SKILL_SYNTHESIS`
+
+Guards:
+- G-ART-020: valid DailyPlan and SprintSpecification submitted.
+
+HumanApproval: `ALWAYS`
+
+---
+
+**T-097** `SKILL_SYNTHESIS → PLANNING`
+
+Guards:
+- G-SKILL-001: skill accepted or discarded.
+
+HumanApproval: `NEVER`
+
 **T-093** `PUBLICATION_READY → PUBLISHED`
 
 Guards:
@@ -2312,6 +2369,7 @@ ImplementationResult
 TriageReport
 ReviewResult
 DailyDevlog
+SkillPackage
 PublicationPackage
 ```
 

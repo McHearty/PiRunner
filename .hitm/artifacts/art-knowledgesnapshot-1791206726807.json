@@ -1,0 +1,222 @@
+{
+  "artifactId": "art-knowledgesnapshot-1791206726807",
+  "artifactType": "KnowledgeSnapshot",
+  "schemaVersion": "1.0.0",
+  "workflowId": "pirunner-canonical",
+  "taskId": "task-KNOWLEDGE_SYNC",
+  "agentId": "0048",
+  "createdAt": "2026-10-05T13:25:26.808Z",
+  "parentArtifactIds": [],
+  "sourceRefs": [
+    {
+      "type": "SESSION",
+      "identifier": "run-1791206726806"
+    }
+  ],
+  "status": "SUBMITTED",
+  "payload": {
+    "sourceRevision": "293ef0f",
+    "dependencyLockHash": "97c4bab5e9a3bfe277322fbb497191fdb2f7999f8fc68e8ad87aaacef9c77dc5",
+    "verifiedAt": "2026-10-05T13:21:35.000Z",
+    "freshnessPolicyVersion": "1.0.0",
+    "relevantSourceFiles": [
+      {
+        "path": "src/extension.ts",
+        "contentHash": "4aa2f9223c41f8ea7845e7554334e40f197a8a6c7f7055e0ab0b23115e4dfc66",
+        "language": "typescript"
+      },
+      {
+        "path": "src/index.ts",
+        "contentHash": "a78fd7bf28a51caa753d8524181af136dd93e20c245dfba32811ac347e267cbb",
+        "language": "typescript"
+      },
+      {
+        "path": "src/agents/AgentPrompts.ts",
+        "contentHash": "7a92c3b91519906e42f824bc45fb2c048335a1c44ef0d3ecd64860e9c2c8822c",
+        "language": "typescript"
+      },
+      {
+        "path": "src/agents/GovernancePrompt.ts",
+        "contentHash": "863be92b82de5b299e777f2fe417dc4bb1052dae247e80cc4c190986b7994cb8",
+        "language": "typescript"
+      },
+      {
+        "path": "src/application/WorkflowController.ts",
+        "contentHash": "0d615be604a76f5901ea251c30f1aabbc42fdbc58fed9657fca6154bd6227b68",
+        "language": "typescript"
+      },
+      {
+        "path": "src/domain/artifacts/ArtifactIngestion.ts",
+        "contentHash": "dcb2c88e97d4b6842ae47c1938ad9aa95301567c515c1b4a1c931dcd50483993",
+        "language": "typescript"
+      },
+      {
+        "path": "src/domain/agents/AgentTaskCatalog.ts",
+        "contentHash": "94516af5ebd35ae4fdd20b78a7e5021e5d354edf14c168072130d194e315b4d9",
+        "language": "typescript"
+      },
+      {
+        "path": "src/domain/artifacts/ArtifactSkeletons.ts",
+        "contentHash": "21b846a332263b0ed4489710f3447bc16cc563a03b384ca3d8e15865b2d6f68b",
+        "language": "typescript"
+      },
+      {
+        "path": "src/domain/artifacts/JsonExtractor.ts",
+        "contentHash": "5d2acb89ce477c0861af09b4801d3e041ee62ac04a4c01670aa9b9fab70ee824",
+        "language": "typescript"
+      },
+      {
+        "path": "src/domain/project/StateValidation.ts",
+        "contentHash": "6c7296cdd2f62101f826f33db8cfb78e5f79774803eb59fb6199afa54fd10170",
+        "language": "typescript"
+      },
+      {
+        "path": "src/domain/repository/PathCapability.ts",
+        "contentHash": "a43e1e27af95503ce488de62a5ee42f039fea92b0b45fa85e6b56d1591287c60",
+        "language": "typescript"
+      },
+      {
+        "path": "src/domain/workflow/WorkflowTransition.ts",
+        "contentHash": "aa0e0938a8ae5d06e8b2c87111684342c0305343547ccfed4417c57b01a7689e",
+        "language": "typescript"
+      },
+      {
+        "path": "src/infrastructure/knowledge/GitKnowledgeProvider.ts",
+        "contentHash": "dcfb27777bba88f4e76d01ffb4e36c2f2ba51b052929d4046da6ec2954d8308f",
+        "language": "typescript"
+      },
+      {
+        "path": "src/infrastructure/knowledge/MultiEcosystemKnowledgeExtractor.ts",
+        "contentHash": "751c09e67f180eb6824026d1a42ae3c02621e3e6636bef7e216c2c8fc7c35775",
+        "language": "typescript"
+      },
+      {
+        "path": "src/infrastructure/pi/PiAgentRunner.ts",
+        "contentHash": "8b205a6717067d3a70e873d951ccc385d7dd6e0e84ce54a60f28bd3081579ea4",
+        "language": "typescript"
+      },
+      {
+        "path": "src/infrastructure/testing/RealDeterministicTestRunner.ts",
+        "contentHash": "03ab84c0c1cd041fa5932c15da50f1750fe39a1754ade42048b988b45c74f893",
+        "language": "typescript"
+      },
+      {
+        "path": "src/infrastructure/events/FileEventStore.ts",
+        "contentHash": "dca4873c913afae1c1ce7049f2402ba7650eeacfd286240145f8e380e0d4a971",
+        "language": "typescript"
+      },
+      {
+        "path": "src/types/pi.d.ts",
+        "contentHash": "2e278caa3b42967d802da09b9814c7a3e9fbdfaaff1dbea4d57b701881c7fe95",
+        "language": "typescript"
+      }
+    ],
+    "relevantSymbols": [
+      {
+        "name": "hitmHarnessExtension",
+        "kind": "function",
+        "location": {
+          "path": "src/extension.ts",
+          "line": 28,
+          "column": 29
+        },
+        "exported": true
+      },
+      {
+        "name": "AGENT_TASK_CATALOG",
+        "kind": "const",
+        "location": {
+          "path": "src/domain/agents/AgentTaskCatalog.ts",
+          "line": 3,
+          "column": 14
+        },
+        "exported": true
+      },
+      {
+        "name": "ARTIFACT_SKELETONS",
+        "kind": "const",
+        "location": {
+          "path": "src/domain/artifacts/ArtifactSkeletons.ts",
+          "line": 1,
+          "column": 14
+        },
+        "exported": true
+      },
+      {
+        "name": "JsonExtractor",
+        "kind": "class",
+        "location": {
+          "path": "src/domain/artifacts/JsonExtractor.ts",
+          "line": 1,
+          "column": 13
+        },
+        "exported": true
+      },
+      {
+        "name": "MultiEcosystemKnowledgeExtractor",
+        "kind": "class",
+        "location": {
+          "path": "src/infrastructure/knowledge/MultiEcosystemKnowledgeExtractor.ts",
+          "line": 9,
+          "column": 13
+        },
+        "exported": true
+      }
+    ],
+    "dependencies": [
+      {
+        "name": "ajv",
+        "version": "^8.17.1",
+        "resolved": "^8.17.1",
+        "ecosystem": "npm",
+        "manifestPath": "package.json"
+      },
+      {
+        "name": "ajv-formats",
+        "version": "^3.0.1",
+        "resolved": "^3.0.1",
+        "ecosystem": "npm",
+        "manifestPath": "package.json"
+      },
+      {
+        "name": "@types/node",
+        "version": "^20.14.0",
+        "resolved": "^20.14.0",
+        "ecosystem": "npm",
+        "manifestPath": "package.json"
+      },
+      {
+        "name": "typescript",
+        "version": "^5.5.0",
+        "resolved": "^5.5.0",
+        "ecosystem": "npm",
+        "manifestPath": "package.json"
+      },
+      {
+        "name": "vitest",
+        "version": "^2.0.0",
+        "resolved": "^2.0.0",
+        "ecosystem": "npm",
+        "manifestPath": "package.json"
+      }
+    ],
+    "documentationRefs": [
+      {
+        "identifier": "TECHSPEC.md",
+        "title": "TECHSPEC.md",
+        "retrievedAt": "2026-10-05T13:21:35.000Z"
+      },
+      {
+        "identifier": "README.md",
+        "title": "README.md",
+        "retrievedAt": "2026-10-05T13:21:35.000Z"
+      },
+      {
+        "identifier": "USAGE.md",
+        "title": "USAGE.md",
+        "retrievedAt": "2026-10-05T13:21:35.000Z"
+      }
+    ],
+    "notes": "Incremental knowledge delta synchronized. Major refactoring detected: agent task catalog extraction, artifact skeleton system, multi-ecosystem knowledge extractor, JSON extraction utility. Skills directory reorganized (old numbered files deleted, new descriptive files added). 18 source files modified, 4 new source files added, 14 skill files removed."
+  }
+}

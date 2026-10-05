@@ -39,7 +39,7 @@ describe('PiAgentRunner Hexagonal Adapter (Normative §4.1, §35, §51, §52)', 
 
     expect(execution.status).toBe('COMPLETED');
     expect(execution.rawOutput).toContain('testCases');
-    expect(mockSession.prompt).toHaveBeenCalledWith('Write test suite');
+    expect(mockSession.prompt).toHaveBeenCalledWith('Write test suite', { streamingBehavior: 'followUp' });
     expect(capturedToolInterceptor).toBeDefined();
 
     // 0120 allowed to write to tests/

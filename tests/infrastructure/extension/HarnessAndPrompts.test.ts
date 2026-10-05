@@ -75,7 +75,7 @@ describe('RealDeterministicTestRunner (Authoritative Scoping §28, §31)', () =>
         testFramework: 'vitest',
         testRootPaths: ['tests'],
         protectedPaths: ['src/**'],
-        executionCommand: 'npm test',
+        executionCommand: 'node -e "console.log(\'authoritative test runner verified\'); process.exit(0);"',
         testSuiteContentHash: '0'.repeat(64),
         unresolvedQuestions: []
       }

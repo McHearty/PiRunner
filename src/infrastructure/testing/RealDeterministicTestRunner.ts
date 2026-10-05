@@ -12,8 +12,18 @@ export class RealDeterministicTestRunner implements TestRunner {
   ) {}
 
   public async execute(request: TestExecutionRequest): Promise<TestExecutionResultData> {
-    // 1. Resolve testRootPaths strictly from accepted TestSpecification (§28, §31) - FAIL CLOSED ON MISSING SPEC
-    const testRoots = this.resolveAuthoritativeTestRoots(request.testSpecificationArtifactId);
+    // 1. Resolve authoritative metadata strictly from accepted TestSpecification (§28, §31) - FAIL CLOSED
+    const specPayload = this.resolveAuthoritativeSpecPayload(request.testSpecificationArtifactId);
+    const testRoots: string[] = specPayload.testRootPaths;
+    const testFramework: string = specPayload.testFramework || 'vitest';
+    const authoritativeCommand: string = specPayload.executionCommand || 'npm test';
+
+    // Verify caller executionCommand does not contradict accepted specification
+    if (request.executionCommand && request.executionCommand !== authoritativeCommand) {
+      throw new Error(
+        `Execution command mismatch: caller requested [${request.executionCommand}], but accepted TestSpecification mandates [${authoritativeCommand}]`
+      );
+    }
 
     // 2. Gather authoritative test files from declared roots only
     const testFiles = this.gatherAuthoritativeTestFiles(testRoots);
@@ -21,10 +31,10 @@ export class RealDeterministicTestRunner implements TestRunner {
       throw new Error(`Authoritative test suite contains zero test files in declared roots: [${testRoots.join(', ')}]`);
     }
 
-    // 3. Compute canonical content hash of the authoritative test suite
+    // 3. Compute canonical content hash using authoritative framework, command, and file corpus
     const liveSuiteHash = TestSuiteHasher.hash({
-      testFramework: 'vitest',
-      executionCommand: request.executionCommand,
+      testFramework,
+      executionCommand: authoritativeCommand,
       files: testFiles
     });
 
@@ -35,9 +45,9 @@ export class RealDeterministicTestRunner implements TestRunner {
       );
     }
 
-    // 5. Execute command in subprocess
+    // 5. Execute authoritative command in subprocess
     const startMs = Date.now();
-    const { stdout, stderr, exitCode } = await this.runCommand(request.executionCommand);
+    const { stdout, stderr, exitCode } = await this.runCommand(authoritativeCommand);
     const durationMs = Date.now() - startMs;
     const rawOutput = `${stdout}\n${stderr}`.trim();
 
@@ -57,7 +67,7 @@ export class RealDeterministicTestRunner implements TestRunner {
       testSuiteContentHash: liveSuiteHash,
       repositoryRevision: request.repositoryRevision,
       dependencyLockHash: request.dependencyLockHash,
-      executionCommand: request.executionCommand,
+      executionCommand: authoritativeCommand,
       passed: isPassed ? 1 : 0,
       failed: isPassed ? 0 : 1,
       skipped: 0,
@@ -68,7 +78,7 @@ export class RealDeterministicTestRunner implements TestRunner {
     };
   }
 
-  private resolveAuthoritativeTestRoots(specArtifactId: string): string[] {
+  private resolveAuthoritativeSpecPayload(specArtifactId: string): any {
     if (!this.artifactStore) {
       throw new Error(`Cannot execute authoritative tests: ArtifactStore unavailable to resolve TestSpecification [${specArtifactId}]`);
     }
@@ -76,11 +86,11 @@ export class RealDeterministicTestRunner implements TestRunner {
     if (!spec) {
       throw new Error(`Cannot execute authoritative tests: Accepted TestSpecification [${specArtifactId}] not found in store`);
     }
-    const roots = (spec.payload as any)?.testRootPaths;
-    if (!Array.isArray(roots) || roots.length === 0) {
+    const payload: any = spec.payload;
+    if (!Array.isArray(payload?.testRootPaths) || payload.testRootPaths.length === 0) {
       throw new Error(`Cannot execute authoritative tests: TestSpecification [${specArtifactId}] does not define valid testRootPaths`);
     }
-    return roots;
+    return payload;
   }
 
   private gatherAuthoritativeTestFiles(roots: string[]): TestFileEntry[] {
