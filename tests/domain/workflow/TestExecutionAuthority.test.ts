@@ -112,7 +112,7 @@ describe('Test Execution Authority Guards (Sprint 4)', () => {
   function createExecutionResult(resultPayload: any) {
     const artifactId = resultPayload.artifactId || 'art-exec-result';
     delete resultPayload.artifactId;
-    artifactStore.save({
+    const artifact = {
       artifactId,
       artifactType: 'TestExecutionResult',
       schemaVersion: '1.0.0',
@@ -124,7 +124,8 @@ describe('Test Execution Authority Guards (Sprint 4)', () => {
       sourceRefs: [{ type: 'COMMAND', identifier: 'npm test' }],
       status: 'ACCEPTED' as const,
       payload: resultPayload
-    });
+    };
+    artifactStore.save(artifact);
   }
 
   function buildGuardContext() {

@@ -652,7 +652,7 @@ export const GUARDS: Record<string, GuardDefinition> = {
       }
 
       // Verify suite hash matches lock
-      const lockDir = ctx.workspaceRoot ? join(ctx.workspaceRoot, '.hitm') : undefined;
+      const lockDir = ctx.workspaceRoot || join(process.cwd(), '.hitm');
       const lock = TestSuiteLock.loadLock(lockDir);
       if (!lock) {
         return fail('No TestSuiteLock exists to validate suite hash');
