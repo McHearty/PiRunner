@@ -27,6 +27,12 @@ export class FileEventStore {
     }
   }
 
+  /**
+   * DANGEROUS: Deletes all events from the journal. Intended for test fixtures only.
+   * In production, canonical workflow history must be append-only; never rewrite or truncate.
+   * Use of this method in production violates the invariant:
+   * "Conflict resolution may append evidence; it may never rewrite historical evidence."
+   */
   public resetJournal(): void {
     this.events = [];
     writeFileSync(this.filePath, '', 'utf8');

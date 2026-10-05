@@ -267,36 +267,63 @@ ${deliverableInstruction}`;
     }
 
     if (choice.startsWith('PRESERVE')) {
-      ctx.ui.notify(`Preserving ${uncommitted.length} file(s) in baseline. Transitioning to KNOWLEDGE_SYNC...`, 'info');
-      
-      // Cleanly reset any interrupted journal lines so adoption sequence begins cleanly at 0
-      eventStore.resetJournal();
-      controller = new WorkflowController(
-        workflowId,
-        artifactStore as any,
-        eventStore as any,
-        testRunner,
-        agentRunner,
-        {},
-        'PROJECT_DISCOVERY',
-        gitRepo,
-        root
-      );
+      ctx.ui.notify(`Preserving ${uncommitted.length} file(s) in baseline.`, 'info');
 
       const freshSnap = gitRepo.getFreshSnapshot();
 
-      await controller.transition('PROJECT_INTAKE', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' } });
+      // Record conflict resolution as a canonical event (never rewrite history)
+      const resolutionEvent: any = {
+        eventId: `evt-${workflowId}-resolution-${Date.now()}`,
+        workflowId,
+        sequence: eventStore.getNextSequence(workflowId),
+        type: 'REPOSITORY_CONFLICT_RESOLUTION',
+        actorType: 'HUMAN',
+        actorId: 'lead-human',
+        timestamp: new Date().toISOString(),
+        stateBefore: controller.getState(),
+        stateAfter: controller.getState(),
+        artifactIds: [],
+        metadata: {
+          resolution: 'PRESERVE',
+          repositoryRevision: freshSnap.headSha,
+          uncommittedFiles: uncommitted,
+          conflictContext: 'dirty working tree at session start or resume validation'
+        }
+      };
+      eventStore.append(resolutionEvent);
 
+      // If resuming an existing workflow, continue from recovered state
+      if (discovery.entryMode === 'RESUME_WORKFLOW' && eventStore.getEvents(workflowId).length > 0) {
+        const recovery = StateRecoveryService.recover(eventStore as any, workflowId);
+        if (recovery.recovered) {
+          await controller.transition('STATE_RECOVERY', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'RESUME_WORKFLOW' } });
+          await controller.transition('STATE_VALIDATION', { actorType: 'SYSTEM', actorId: '0000' });
+          await controller.transition(recovery.canonicalState, { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MATCH' } });
+          ctx.ui.notify(`Resumed canonical workflow state [${controller.getState()}] after PRESERVE resolution.`, 'info');
+          const agent = getActiveAgentEntry(controller.getState());
+          updateFooterStatus(ctx);
+          await promptAgentHandoff(agent, controller.getState(), ctx);
+          return;
+        }
+      }
+
+      // If adopting, establish baseline and proceed
       const baseline = ProjectIntakeService.createBaselineArtifact(workflowId, freshSnap, gitRepo, root);
       baseline.payload.workingTreeState = 'DIRTY';
       baseline.payload.detectedUncommittedChanges = uncommitted;
       artifactStore.save(baseline);
 
-      await controller.transition('PROJECT_BASELINE', { actorType: 'SYSTEM', actorId: '0000' });
-      await controller.transition('KNOWLEDGE_SYNC', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { preserveDirty: true } });
+      if (controller.getState() === 'PROJECT_DISCOVERY') {
+        await controller.transition('PROJECT_INTAKE', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' } });
+      }
+      if (controller.getState() !== 'PROJECT_BASELINE') {
+        await controller.transition('PROJECT_BASELINE', { actorType: 'SYSTEM', actorId: '0000' });
+      }
+      if (controller.getState() !== 'KNOWLEDGE_SYNC') {
+        await controller.transition('KNOWLEDGE_SYNC', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { preserveDirty: true } });
+      }
 
       updateFooterStatus(ctx);
-
       const knowledgeAgent = getActiveAgentEntry('KNOWLEDGE_SYNC');
       ctx.ui.notify(`Project baseline established with ${uncommitted.length} preserved file(s). State is now [KNOWLEDGE_SYNC].`, 'info');
       await promptAgentHandoff(knowledgeAgent, 'KNOWLEDGE_SYNC', ctx);

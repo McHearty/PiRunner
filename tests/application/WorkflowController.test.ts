@@ -373,3 +373,137 @@ describe('MVP Acceptance Workflow (§43 Normative End-to-End with Guards)', () =
     expect(controller.getState()).toBe('REMOTE_PUBLISHED');
   });
 });
+
+describe('Journal Preservation on PRESERVE Resolution (Sprint 1 Regression)', () => {
+  let validator: ArtifactValidator;
+  let artifactStore: ArtifactStore;
+  let eventStore: EventStore;
+  let testRunner: FakeTestRunner;
+  let agentRunner: FakeAgentRunner;
+  let controller: WorkflowController;
+
+  const validHash = '1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff';
+  const hermeticAcceptanceDir = join(process.cwd(), '.hitm', 'hermetic-journal-preserve');
+
+  beforeEach(() => {
+    if (!existsSync(hermeticAcceptanceDir)) {
+      mkdirSync(hermeticAcceptanceDir, { recursive: true });
+    }
+
+    validator = new ArtifactValidator();
+    artifactStore = new ArtifactStore(validator);
+    eventStore = new EventStore();
+    testRunner = new FakeTestRunner();
+    agentRunner = new FakeAgentRunner();
+
+    controller = new WorkflowController(
+      'wf-journal-preserve',
+      artifactStore,
+      eventStore,
+      testRunner,
+      agentRunner,
+      {},
+      'PROJECT_DISCOVERY',
+      undefined,
+      hermeticAcceptanceDir
+    );
+  });
+
+  afterAll(() => {
+    rmSync(hermeticAcceptanceDir, { recursive: true, force: true });
+  });
+
+  it('PRESERVE resolution retains historical events and appends resolution event', async () => {
+    // Establish canonical history with multiple events
+    controller.setRepositorySnapshot({
+      branch: 'main',
+      headSha: 'a1b2c3d4e5f6',
+      isClean: false // Dirty working tree
+    });
+
+    // Transition through several states to build event history
+    await controller.transition('PROJECT_INTAKE', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' } });
+    const baseline = {
+      artifactId: 'art-baseline',
+      artifactType: 'ProjectBaseline',
+      schemaVersion: '1.0.0',
+      workflowId: 'wf-journal-preserve',
+      taskId: 't-1',
+      agentId: '0000',
+      createdAt: new Date().toISOString(),
+      parentArtifactIds: [],
+      sourceRefs: [{ type: 'GIT', identifier: 'rev' }],
+      status: 'SUBMITTED' as const,
+      payload: {
+        repositoryIdentity: 'test-repo',
+        baseRevision: 'a1b2c3d4e5f6',
+        branch: 'main',
+        workingTreeState: 'DIRTY' as const,
+        projectType: 'typescript',
+        buildSystem: 'npm',
+        specificationRefs: [],
+        testRefs: [],
+        documentationRefs: [],
+        dependencyLockHash: validHash,
+        sourceInventory: [],
+        testInventory: [],
+        existingCiConfiguration: [],
+        detectedUncommittedChanges: ['src/test.ts'],
+        unresolvedProjectQuestions: [],
+        intakeTimestamp: new Date().toISOString(),
+        repositorySnapshotHash: validHash
+      }
+    };
+    artifactStore.save(baseline);
+
+    await controller.transition('PROJECT_BASELINE', { actorType: 'SYSTEM', actorId: '0000' });
+
+    // Record the events before PRESERVE resolution
+    const eventsBeforePreserve = eventStore.getEvents('wf-journal-preserve');
+    expect(eventsBeforePreserve.length).toBe(2); // PROJECT_INTAKE + PROJECT_BASELINE
+
+    // Simulate PRESERVE resolution by appending a resolution event
+    // (In the actual extension, this is done by promptConflictResolution)
+    const resolutionEvent: any = {
+      eventId: `evt-wf-journal-preserve-resolution-${Date.now()}`,
+      workflowId: 'wf-journal-preserve',
+      sequence: eventStore.getNextSequence('wf-journal-preserve'),
+      type: 'REPOSITORY_CONFLICT_RESOLUTION',
+      actorType: 'HUMAN',
+      actorId: 'lead-human',
+      timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_BASELINE',
+      stateAfter: 'PROJECT_BASELINE',
+      artifactIds: [],
+      metadata: {
+        resolution: 'PRESERVE',
+        repositoryRevision: 'a1b2c3d4e5f6',
+        uncommittedFiles: ['src/test.ts'],
+        conflictContext: 'dirty working tree at session start'
+      }
+    };
+    eventStore.append(resolutionEvent);
+
+    // Verify historical events survived and resolution was appended
+    const eventsAfterPreserve = eventStore.getEvents('wf-journal-preserve');
+    expect(eventsAfterPreserve.length).toBe(3); // 2 original + 1 resolution
+
+    // Verify original events still exist
+    expect(eventsAfterPreserve[0].type).toBe('TRANSITION_T-001A'); // PROJECT_INTAKE
+    expect(eventsAfterPreserve[1].type).toBe('TRANSITION_T-002A'); // PROJECT_BASELINE
+
+    // Verify resolution event was appended
+    expect(eventsAfterPreserve[2].type).toBe('REPOSITORY_CONFLICT_RESOLUTION');
+    expect(eventsAfterPreserve[2].metadata.resolution).toBe('PRESERVE');
+
+    // Verify sequence numbers remain monotonic
+    for (let i = 0; i < eventsAfterPreserve.length; i++) {
+      expect(eventsAfterPreserve[i].sequence).toBe(i);
+    }
+
+    // Verify no sequence was reused
+    const sequences = eventsAfterPreserve.map(e => e.sequence);
+    const uniqueSequences = new Set(sequences);
+    expect(uniqueSequences.size).toBe(sequences.length);
+  });
+});
