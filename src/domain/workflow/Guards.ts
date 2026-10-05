@@ -478,10 +478,55 @@ export const GUARDS: Record<string, GuardDefinition> = {
   },
   'G-TEST-013': {
     id: 'G-TEST-013',
-    description: 'Deterministic TestExecutionResult exists and is recorded',
+    description: 'Valid TestExecutionResult matches accepted TestSpecification and lock',
     evaluate: (ctx) => {
-      const execResult = ctx.artifacts.getByType('TestExecutionResult');
-      return execResult.length > 0 ? pass() : fail('No deterministic TestExecutionResult found');
+      const execResults = ctx.artifacts.getByType('TestExecutionResult');
+      if (execResults.length === 0) {
+        return fail('No TestExecutionResult found');
+      }
+
+      // Use getLatestAccepted to find the most recent accepted result
+      const execResult = execResults[execResults.length - 1];
+      const payload = execResult.payload as any;
+
+      // Check status is PASSED
+      if (payload.status !== 'PASSED') {
+        return fail(`TestExecutionResult status is ${payload.status}, expected PASSED`);
+      }
+
+      // Verify against accepted TestSpecification
+      const testSpec = ctx.artifacts.getLatestAccepted('TestSpecification');
+      if (!testSpec) {
+        return fail('No accepted TestSpecification found to validate result against');
+      }
+
+      // Verify testSpecificationArtifactId matches
+      if (payload.testSpecificationArtifactId !== testSpec.artifactId) {
+        return fail(`TestExecutionResult references artifact ${payload.testSpecificationArtifactId} but accepted TestSpecification is ${testSpec.artifactId}`);
+      }
+
+      // Verify suite hash matches lock
+      const lockDir = ctx.workspaceRoot || join(process.cwd(), '.hitm');
+      const lock = TestSuiteLock.loadLock(lockDir);
+      if (!lock) {
+        return fail('No TestSuiteLock exists to validate suite hash');
+      }
+      if (payload.testSuiteContentHash !== lock.testSuiteContentHash) {
+        return fail(`TestExecutionResult suite hash (${payload.testSuiteContentHash}) differs from TestSuiteLock (${lock.testSuiteContentHash})`);
+      }
+
+      // Verify execution command matches TestSpecification
+      const specPayload = testSpec.payload as any;
+      if (payload.executionCommand !== specPayload.executionCommand) {
+        return fail(`TestExecutionResult command (${payload.executionCommand}) differs from TestSpecification command (${specPayload.executionCommand})`);
+      }
+
+      // Verify repository revision matches
+      if (ctx.repository && payload.repositoryRevision !== ctx.repository.headSha) {
+        return fail(`TestExecutionResult revision (${payload.repositoryRevision}) differs from current HEAD (${ctx.repository.headSha})`);
+      }
+
+      return pass('TestExecutionResult matches accepted TestSpecification and lock');
     }
   },
   'G-REPO-003': {
@@ -579,10 +624,49 @@ export const GUARDS: Record<string, GuardDefinition> = {
   },
   'G-TEST-016': {
     id: 'G-TEST-016',
-    description: 'TestExecutionResult corresponds to commit under review',
+    description: 'Valid TestExecutionResult corresponds to commit under review',
     evaluate: (ctx) => {
-      const exec = ctx.artifacts.getByType('TestExecutionResult');
-      return exec.length > 0 ? pass() : fail('No TestExecutionResult available for review');
+      const execResults = ctx.artifacts.getByType('TestExecutionResult');
+      if (execResults.length === 0) {
+        return fail('No TestExecutionResult available for review');
+      }
+
+      // Use getLatestAccepted to find the most recent result
+      const execResult = execResults[execResults.length - 1];
+      const payload = execResult.payload as any;
+
+      // Check status is PASSED
+      if (payload.status !== 'PASSED') {
+        return fail(`TestExecutionResult status is ${payload.status}, expected PASSED`);
+      }
+
+      // Verify against accepted TestSpecification
+      const testSpec = ctx.artifacts.getLatestAccepted('TestSpecification');
+      if (!testSpec) {
+        return fail('No accepted TestSpecification found to validate result against');
+      }
+
+      // Verify testSpecificationArtifactId matches
+      if (payload.testSpecificationArtifactId !== testSpec.artifactId) {
+        return fail(`TestExecutionResult references artifact ${payload.testSpecificationArtifactId} but accepted TestSpecification is ${testSpec.artifactId}`);
+      }
+
+      // Verify suite hash matches lock
+      const lockDir = ctx.workspaceRoot ? join(ctx.workspaceRoot, '.hitm') : undefined;
+      const lock = TestSuiteLock.loadLock(lockDir);
+      if (!lock) {
+        return fail('No TestSuiteLock exists to validate suite hash');
+      }
+      if (payload.testSuiteContentHash !== lock.testSuiteContentHash) {
+        return fail(`TestExecutionResult suite hash (${payload.testSuiteContentHash}) differs from TestSuiteLock (${lock.testSuiteContentHash})`);
+      }
+
+      // Verify repository revision matches current HEAD
+      if (ctx.repository && payload.repositoryRevision !== ctx.repository.headSha) {
+        return fail(`TestExecutionResult revision (${payload.repositoryRevision}) differs from current HEAD (${ctx.repository.headSha})`);
+      }
+
+      return pass('TestExecutionResult corresponds to commit under review');
     }
   },
   'G-ART-051': {

@@ -7,6 +7,7 @@ import { ArtifactValidator } from '../../src/domain/artifacts/ArtifactValidator.
 import { EventStore } from '../../src/domain/events/EventStore.js';
 import { FakeTestRunner } from '../../src/infrastructure/testing/FakeTestRunner.js';
 import { FakeAgentRunner } from '../../src/infrastructure/agents/FakeAgentRunner.js';
+import { TestSuiteLock } from '../../src/domain/testing/TestSuiteLock.js';
 
 describe('MVP Acceptance Workflow (§43 Normative End-to-End with Guards)', () => {
   let validator: ArtifactValidator;
@@ -48,6 +49,15 @@ describe('MVP Acceptance Workflow (§43 Normative End-to-End with Guards)', () =
       headSha: 'a1b2c3d4e5f6',
       isClean: true
     });
+
+    // Create test suite lock for the hermetic acceptance directory
+    TestSuiteLock.createLock({
+      workflowId: 'wf-mvp-1',
+      testSpecificationArtifactId: 'art-test-spec',
+      testSuiteContentHash: validHash,
+      lockedAt: new Date().toISOString(),
+      fileCount: 5
+    }, hermeticAcceptanceDir);
   });
 
   afterAll(() => {
