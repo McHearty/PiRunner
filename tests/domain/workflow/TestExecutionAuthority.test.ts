@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { join } from 'node:path';
 import { mkdirSync, rmSync, existsSync } from 'node:fs';
 import { WorkflowController } from '../../../src/application/WorkflowController.js';
@@ -64,9 +64,7 @@ describe('Test Execution Authority Guards (Sprint 4)', () => {
     }, hermeticDir);
   });
 
-  // afterAll(() => {
-  //   rmSync(hermeticDir, { recursive: true, force: true });
-  // });
+
 
   function createTestSpec(artifactId: string = 'art-test-spec') {
     artifactStore.save({
@@ -128,11 +126,11 @@ describe('Test Execution Authority Guards (Sprint 4)', () => {
     artifactStore.save(artifact);
   }
 
-  function buildGuardContext() {
+  function buildGuardContext(artifacts?: any) {
     return {
       currentState: 'COMMIT_CREATED' as any,
       targetState: 'REVIEW' as any,
-      artifacts: {
+      artifacts: artifacts || {
         get: (id: string) => artifactStore.get(id),
         getByType: (type: string) => artifactStore.getByType(type),
         getLatestAccepted: (type: string, workflowId?: string) => artifactStore.getLatestAccepted(type, workflowId || 'wf-test-auth')
@@ -344,7 +342,7 @@ describe('Test Execution Authority Guards (Sprint 4)', () => {
       status: 'PASSED',
       testSpecificationArtifactId: 'art-test-spec',
       testSuiteContentHash: validHash,
-      repositoryRevision: 'old-revision-123',
+      repositoryRevision: 'aabbccddeeff00112233445566778899aabbccdd',
       dependencyLockHash: validHash,
       executionCommand: validCommand,
       passed: 5,
@@ -354,7 +352,7 @@ describe('Test Execution Authority Guards (Sprint 4)', () => {
       executedTests: [{ testId: 'T1', status: 'PASSED' }],
       rawOutput: 'PASSED'
     });
-
+    
     const ctx = buildGuardContext();
     const result = GUARDS['G-TEST-016'].evaluate(ctx);
     expect(result.satisfied).toBe(false);
