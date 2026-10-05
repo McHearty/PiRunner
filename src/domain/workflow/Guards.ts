@@ -19,12 +19,13 @@ export interface GuardContext {
   artifacts: {
     get<T = any>(artifactId: string): StoredArtifact<T> | undefined;
     getByType<T = any>(artifactType: string): StoredArtifact<T>[];
-    getLatestAccepted<T = any>(artifactType: string): StoredArtifact<T> | undefined;
+    getLatestAccepted<T = any>(artifactType: string, workflowId?: string): StoredArtifact<T> | undefined;
   };
   eventHistory: readonly WorkflowEvent[];
   config: WorkflowConfig;
   repository?: RepositorySnapshot;
-  referencedArtifactIds?: string[];  workspaceRoot?: string;
+  referencedArtifactIds?: string[];
+  workspaceRoot?: string;
   metadata?: Record<string, unknown>;
 }
 

@@ -127,7 +127,7 @@ export class WorkflowController {
       artifacts: {
         get: (id) => this.artifactStore.get(id),
         getByType: (type) => this.artifactStore.getByType(type),
-        getLatestAccepted: (type) => this.artifactStore.getLatestAccepted(type)
+        getLatestAccepted: (type) => this.artifactStore.getLatestAccepted(type, this.workflowId)
       },
       eventHistory: this.eventStore.getEvents(this.workflowId),
       config: this.config,
@@ -154,7 +154,7 @@ export class WorkflowController {
 
     // Persist TestSuiteLock on TEST_READY derived strictly from accepted TestSpecification (§30)
     if (targetState === 'TEST_READY') {
-      const testSpec = this.artifactStore.getLatestAccepted('TestSpecification');
+      const testSpec = this.artifactStore.getLatestAccepted('TestSpecification', this.workflowId);
       const specPayload: any = testSpec?.payload;
       const canonicalHash = specPayload?.testSuiteContentHash || options.metadata?.testSuiteHash;
 

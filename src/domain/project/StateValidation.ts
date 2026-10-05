@@ -2,11 +2,12 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { WorkflowState } from '../workflow/WorkflowState.js';
+import { WorkflowEvent } from '../workflow/WorkflowEvent.js';
 import { RepositorySnapshot } from '../workflow/Guards.js';
 import { StateRecoveryResult } from './StateRecovery.js';
 import { TestSuiteLock } from '../testing/TestSuiteLock.js';
 import { TestSuiteHasher, TestFileEntry } from '../testing/TestSuiteHasher.js';
-import { ArtifactStore } from '../artifacts/ArtifactStore.js';
+import { ArtifactStore, StoredArtifact } from '../artifacts/ArtifactStore.js';
 
 export interface StateValidationResult {
   status: 'MATCH' | 'MISMATCH' | 'AMBIGUOUS';
@@ -14,11 +15,62 @@ export interface StateValidationResult {
 }
 
 export class StateValidationService {
+  /**
+   * Check if an artifact has canonical provenance in the event history.
+   * An artifact has canonical provenance if it is referenced in at least one
+   * event in the workflow's event history.
+   */
+  public static hasCanonicalProvenance(
+    artifact: StoredArtifact,
+    eventHistory: readonly WorkflowEvent[]
+  ): boolean {
+    // Check workflowId matches
+    const workflowArtifacts = eventHistory.filter(e => 
+      e.artifactIds && e.artifactIds.includes(artifact.artifactId)
+    );
+    return workflowArtifacts.length > 0;
+  }
+
+  /**
+   * Detect orphaned accepted artifacts — artifacts marked ACCEPTED but with no
+   * canonical provenance in the event history. These must fail closed.
+   */
+  public static detectOrphanedArtifacts(
+    artifactStore: ArtifactStore,
+    eventHistory: readonly WorkflowEvent[],
+    workflowId: string
+  ): string[] {
+    const orphans: string[] = [];
+    
+    // Check all artifact types that are typically accepted
+    const types = [
+      'ConceptPackage', 'MasterSpecification', 'SprintSpecification',
+      'TestSpecification', 'ImplementationResult', 'TestExecutionResult',
+      'KnowledgeSnapshot', 'ReviewResult', 'ProjectBaseline'
+    ];
+    
+    for (const type of types) {
+      const accepted = artifactStore.getByType(type).filter(a => 
+        a.status === 'ACCEPTED' && a.workflowId === workflowId
+      );
+      
+      for (const artifact of accepted) {
+        if (!this.hasCanonicalProvenance(artifact, eventHistory)) {
+          orphans.push(`${artifact.artifactId} (${type})`);
+        }
+      }
+    }
+    
+    return orphans;
+  }
+
   public static validate(
     recovery: StateRecoveryResult,
     repository: RepositorySnapshot,
     artifactStore?: ArtifactStore,
-    workspaceRoot: string = process.cwd()
+    workspaceRoot: string = process.cwd(),
+    workflowId?: string,
+    eventHistory?: readonly WorkflowEvent[]
   ): StateValidationResult {
     const reasons: string[] = [];
 
@@ -27,6 +79,14 @@ export class StateValidationService {
     }
 
     const state = recovery.canonicalState;
+
+    // Detect orphaned accepted artifacts (must fail closed)
+    if (artifactStore && eventHistory && workflowId) {
+      const orphans = this.detectOrphanedArtifacts(artifactStore, eventHistory, workflowId);
+      if (orphans.length > 0) {
+        reasons.push(`Orphaned accepted artifacts detected (no canonical provenance): ${orphans.join(', ')}`);
+      }
+    }
 
     // 1. Validate Working Tree Cleanliness for post-commit states (§20)
     const cleanRequiredStates: WorkflowState[] = [
@@ -57,7 +117,7 @@ export class StateValidationService {
       } else if (!artifactStore) {
         reasons.push('ArtifactStore unavailable to resolve accepted TestSpecification during resume validation');
       } else {
-        const testSpec = artifactStore.getLatestAccepted('TestSpecification');
+        const testSpec = artifactStore.getLatestAccepted('TestSpecification', workflowId);
         if (!testSpec) {
           reasons.push(`Cannot validate test suite on resume: No accepted TestSpecification found for state [${state}]`);
         } else {
@@ -94,7 +154,7 @@ export class StateValidationService {
 
     // 3. Validate Live Lockfile Hash against accepted KnowledgeSnapshot (§20)
     if (artifactStore) {
-      const knowledge = artifactStore.getLatestAccepted('KnowledgeSnapshot');
+      const knowledge = artifactStore.getLatestAccepted('KnowledgeSnapshot', workflowId);
       if (knowledge && (knowledge.payload as any).dependencyLockHash) {
         const lockPath = join(workspaceRoot, 'package-lock.json');
         if (existsSync(lockPath)) {
@@ -108,7 +168,7 @@ export class StateValidationService {
 
     // 4. Validate Commit Reachability for reviewed commit (§20)
     if (artifactStore && ['COMMIT_CREATED', 'REVIEW', 'SPRINT_ACCEPTED'].includes(state)) {
-      const impl = artifactStore.getLatestAccepted('ImplementationResult');
+      const impl = artifactStore.getLatestAccepted('ImplementationResult', workflowId);
       const sha = (impl?.payload as any)?.commitSha;
       if (sha && sha !== repository.headSha) {
         reasons.push(`Current HEAD revision (${repository.headSha}) does not match implementation commit (${sha})`);

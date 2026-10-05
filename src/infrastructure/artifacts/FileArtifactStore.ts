@@ -45,8 +45,27 @@ export class FileArtifactStore {
     return matches;
   }
 
-  public getLatestAccepted<T = any>(artifactType: string): StoredArtifact<T> | undefined {
-    const matching = this.getByType<T>(artifactType).filter(a => a.status === 'ACCEPTED');
-    return matching[matching.length - 1];
+  /**
+   * Returns the latest accepted artifact of the given type, deterministically sorted by createdAt,
+   * then artifactId as tiebreaker. Filters by workflowId to prevent cross-workflow authority.
+   * @param artifactType The artifact type to search for
+   * @param workflowId Optional workflow ID to filter by (required for provenance)
+   */
+  public getLatestAccepted<T = any>(artifactType: string, workflowId?: string): StoredArtifact<T> | undefined {
+    let matching = this.getByType<T>(artifactType).filter(a => a.status === 'ACCEPTED');
+    if (workflowId) {
+      matching = matching.filter(a => a.workflowId === workflowId);
+    }
+    if (matching.length === 0) return undefined;
+
+    // Deterministic ordering: createdAt (newest first), then artifactId as tiebreaker
+    matching.sort((a, b) => {
+      const timeA = new Date(a.createdAt).getTime();
+      const timeB = new Date(b.createdAt).getTime();
+      if (timeB !== timeA) return timeB - timeA; // Newest first
+      return a.artifactId.localeCompare(b.artifactId); // Deterministic tiebreaker
+    });
+
+    return matching[0];
   }
 }

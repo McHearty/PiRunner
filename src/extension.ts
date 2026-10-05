@@ -352,7 +352,10 @@ ${deliverableInstruction}`;
     controller.setRepositorySnapshot(discovery.repositorySnapshot);
 
     const recovery = StateRecoveryService.recover(eventStore as any, workflowId);
-    const validation = StateValidationService.validate(recovery, discovery.repositorySnapshot, artifactStore as any, root);
+    const validation = StateValidationService.validate(
+      recovery, discovery.repositorySnapshot, artifactStore as any, root, workflowId,
+      eventStore.getEvents(workflowId)
+    );
 
     if (validation.status === 'MATCH') {
       await controller.transition(recovery.canonicalState, { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MATCH' } });
@@ -429,7 +432,10 @@ ${deliverableInstruction}`;
       if (controller.getState() === 'PROJECT_DISCOVERY') {
         if (discovery.entryMode === 'RESUME_WORKFLOW') {
           const recovery = StateRecoveryService.recover(eventStore as any, workflowId);
-          const validation = StateValidationService.validate(recovery, discovery.repositorySnapshot, artifactStore as any, root);
+          const validation = StateValidationService.validate(
+            recovery, discovery.repositorySnapshot, artifactStore as any, root, workflowId,
+            eventStore.getEvents(workflowId)
+          );
 
           if (!recovery.recovered || validation.status === 'MISMATCH') {
             await promptConflictResolution(ctx);
@@ -684,7 +690,7 @@ You have ZERO state transition authority. Transitions are strictly governed by P
   pi.registerCommand('hitm-test', {
     description: 'Trigger authoritative TestRunner consuming accepted TestSpecification and real lockfile',
     handler: async (_args: string, ctx: ExtensionContext) => {
-      const testSpec = artifactStore.getLatestAccepted('TestSpecification');
+      const testSpec = artifactStore.getLatestAccepted('TestSpecification', workflowId);
       const lock = TestSuiteLock.loadLock();
       const expectedHash = lock?.testSuiteContentHash || (testSpec?.payload as any)?.testSuiteContentHash;
 
