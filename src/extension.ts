@@ -703,6 +703,12 @@ You have ZERO state transition authority. Transitions are strictly governed by P
       ctx.ui.notify(`Executing authoritative test suite against locked hash (${expectedHash.slice(0, 10)}...)...`, 'info');
       try {
         const freshSnap = gitRepo.getFreshSnapshot();
+        const executionCommand = (testSpec?.payload as any)?.executionCommand;
+        if (!executionCommand) {
+          ctx.ui.notify('Cannot run authoritative test: TestSpecification does not specify executionCommand.', 'warning');
+          return;
+        }
+
         const result = await testRunner.execute({
           workflowId,
           taskId: 'authoritative-run',
@@ -710,7 +716,7 @@ You have ZERO state transition authority. Transitions are strictly governed by P
           testSuiteContentHash: expectedHash,
           repositoryRevision: freshSnap.headSha,
           dependencyLockHash: depLockHash,
-          executionCommand: (testSpec?.payload as any)?.executionCommand || 'npm test'
+          executionCommand
         });
 
         if (result.status === 'PASSED') {

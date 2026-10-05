@@ -1,0 +1,67 @@
+{
+  "artifactId": "art-test-spec-canonical",
+  "artifactType": "TestSpecification",
+  "schemaVersion": "1.0.0",
+  "workflowId": "pirunner-canonical",
+  "taskId": "author-acceptance-tests",
+  "agentId": "0120",
+  "createdAt": "2026-10-05T16:48:41.465Z",
+  "parentArtifactIds": [
+    "art-sprint-spec-canonical"
+  ],
+  "sourceRefs": [
+    {
+      "type": "TEST",
+      "identifier": "pirunner-canonical"
+    }
+  ],
+  "status": "ACCEPTED",
+  "payload": {
+    "masterSpecificationArtifactId": "art-spec-canonical",
+    "sprintSpecificationArtifactId": "art-sprint-spec-canonical",
+    "testCases": [
+      {
+        "id": "TC-SMOKES",
+        "requirementIds": [
+          "REQ-SMOKES"
+        ],
+        "acceptanceCriteriaIds": [
+          "AC-SMOKES"
+        ],
+        "category": "SMOKE",
+        "description": "Complete test suite smoke test",
+        "preconditions": [],
+        "inputs": [],
+        "expectedBehavior": [
+          "All tests pass"
+        ],
+        "failureCondition": [
+          "Any test fails"
+        ],
+        "testPath": "tests/**",
+        "testSymbol": "all"
+      }
+    ],
+    "requirementCoverage": [
+      {
+        "requirementId": "REQ-SMOKES",
+        "disposition": "AUTOMATED",
+        "testCaseIds": [
+          "TC-SMOKES"
+        ]
+      }
+    ],
+    "invariants": [],
+    "fixtures": [],
+    "testFramework": "vitest",
+    "testRootPaths": [
+      "tests"
+    ],
+    "protectedPaths": [
+      "src/**"
+    ],
+    "executionCommand": "npm test",
+    "testSuiteContentHash": "dc006d7d20472e78961f022d0c8969b489f2d1c19d3ffeb68be492a886168372",
+    "unresolvedQuestions": []
+  }
+}

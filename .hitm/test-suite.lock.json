@@ -1,7 +1,7 @@
 {
   "workflowId": "pirunner-canonical",
   "testSpecificationArtifactId": "art-test-spec-canonical",
-  "testSuiteContentHash": "d4176a96a82e4b000056b704e9514c3b99037c6bd7d05405cf318671b416a997",
-  "lockedAt": "2026-10-04T13:51:48.332Z",
-  "fileCount": 15
+  "testSuiteContentHash": "dc006d7d20472e78961f022d0c8969b489f2d1c19d3ffeb68be492a886168372",
+  "lockedAt": "2026-10-05T16:48:14.921Z",
+  "fileCount": 18
 }

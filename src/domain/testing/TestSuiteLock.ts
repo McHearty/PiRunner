@@ -38,12 +38,13 @@ export class TestSuiteLock {
 
   public static verifyLiveSuite(
     testFiles: TestFileEntry[],
-    executionCommand: string = 'npm test',
+    testFramework: string,
+    executionCommand: string,
     storageDir: string = join(process.cwd(), '.hitm')
   ): { valid: boolean; expectedHash?: string; liveHash: string } {
     const lock = this.loadLock(storageDir);
     const liveHash = TestSuiteHasher.hash({
-      testFramework: 'vitest',
+      testFramework,
       executionCommand,
       files: testFiles
     });
@@ -57,5 +58,31 @@ export class TestSuiteLock {
       expectedHash: lock.testSuiteContentHash,
       liveHash
     };
+  }
+
+  /**
+   * Verify that the TestSuiteLock matches the accepted TestSpecification.
+   * The lock must reference the exact artifact and have the identical hash.
+   */
+  public static verifyLockMatchesSpec(
+    lock: TestSuiteLockData,
+    testSpecificationArtifactId: string,
+    testSuiteContentHash: string
+  ): { valid: boolean; reason: string } {
+    if (lock.testSpecificationArtifactId !== testSpecificationArtifactId) {
+      return {
+        valid: false,
+        reason: `TestSuiteLock references artifact ${lock.testSpecificationArtifactId} but accepted TestSpecification is ${testSpecificationArtifactId}`
+      };
+    }
+
+    if (lock.testSuiteContentHash !== testSuiteContentHash) {
+      return {
+        valid: false,
+        reason: `TestSuiteLock hash (${lock.testSuiteContentHash}) does not match accepted TestSpecification hash (${testSuiteContentHash})`
+      };
+    }
+
+    return { valid: true, reason: 'Lock matches accepted TestSpecification' };
   }
 }

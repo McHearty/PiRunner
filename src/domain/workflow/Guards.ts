@@ -420,22 +420,26 @@ export const GUARDS: Record<string, GuardDefinition> = {
     id: 'G-ART-034',
     description: 'Active TestSpecification accepted and locked',
     evaluate: (ctx) => {
-      const testSpec = ctx.artifacts.getByType('TestSpecification').find(a => a.status === 'ACCEPTED' || a.status === 'SUBMITTED');
-      return testSpec ? pass() : fail('Active TestSpecification missing');
+      const testSpec = ctx.artifacts.getLatestAccepted('TestSpecification');
+      return testSpec ? pass('Accepted TestSpecification exists') : fail('No accepted TestSpecification found');
     }
   },
   'G-TEST-012': {
     id: 'G-TEST-012',
     description: 'Authoritative test-suite content hash matches locked specification',
     evaluate: (ctx) => {
-      const lockDir = ctx.workspaceRoot ? join(ctx.workspaceRoot, '.hitm') : undefined;      const lock = TestSuiteLock.loadLock(lockDir);
-      const testSpec = ctx.artifacts.getByType('TestSpecification').find(a => a.status === 'ACCEPTED' || a.status === 'SUBMITTED');
+      const lockDir = ctx.workspaceRoot ? join(ctx.workspaceRoot, '.hitm') : undefined;
+      const lock = TestSuiteLock.loadLock(lockDir);
+      const testSpec = ctx.artifacts.getLatestAccepted('TestSpecification');
       const expectedHash = (testSpec?.payload as any)?.testSuiteContentHash;
 
       if (!lock) return fail('No persistent TestSuiteLock exists');
-      return lock.testSuiteContentHash === expectedHash
-        ? pass()
-        : fail(`Live TestSuiteLock (${lock.testSuiteContentHash}) differs from specification (${expectedHash})`);
+      if (!testSpec) return fail('No accepted TestSpecification found to validate lock against');
+
+      const lockValidation = TestSuiteLock.verifyLockMatchesSpec(lock, testSpec.artifactId, expectedHash);
+      if (!lockValidation.valid) return fail(lockValidation.reason);
+
+      return pass('TestSuiteLock matches accepted TestSpecification');
     }
   },
   'G-REPO-001': {
