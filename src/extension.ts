@@ -368,57 +368,12 @@ ${deliverableInstruction}`;
     updateFooterStatus(ctx);
   }
 
-  // Active Tool Capability Sandbox
+  // Tool capability sandboxing is handled by PiAgentRunner.authorizeToolCall
+  // (invocation-scoped). The extension's tool_call handler was removed to
+  // eliminate the duplicate authorization path that relied on workflow state
+  // instead of invocation context.
+
   if (typeof (pi as any).on === 'function') {
-    (pi as any).on('tool_call', async (event: any) => {
-      const currentState = controller.getState();
-      const currentAgent = getActiveAgentEntry(currentState);
-      const toolName = event.toolName;
-      const input = event.input || event.args || {};
-
-      if (toolName === 'write' || toolName === 'edit') {
-        const filePath = (input.path || input.filePath || '') as string;
-        const allowed = PathCapabilityEnforcer.isWriteAllowed(currentAgent.canonicalRole, filePath);
-        if (!allowed) {
-          const directive = PathCapabilityEnforcer.getRoleDirective(currentAgent.canonicalRole);
-          return {
-            block: true,
-            reason: `[HITM Role Violation]: Action blocked. ${directive}\nYou are forbidden from writing to "${filePath}". Scratch files may only be saved in .hitm/tmp/ if permitted.`
-          };
-        }
-      }
-
-      if (toolName === 'bash' || toolName === 'exec' || toolName === 'shell') {
-        const cmd = (input.command || input.cmd || '') as string;
-        const sanitizedCmd = cmd
-          .replace(/2>\s*\/dev\/null/g, '')
-          .replace(/>\s*\/dev\/null/g, '')
-          .replace(/&>\s*\/dev\/null/g, '');
-
-        const isReadOnlyRole = ['CONCEPT', 'SPECIFICATION', 'PLANNING', 'TRIAGE', 'REVIEW', 'DEVLOG', 'PUBLICATION'].includes(currentAgent.canonicalRole);
-        if (isReadOnlyRole && (sanitizedCmd.includes('>') || sanitizedCmd.includes('tee ') || sanitizedCmd.includes('touch ') || sanitizedCmd.includes('cp ') || sanitizedCmd.includes('mv '))) {
-          const directive = PathCapabilityEnforcer.getRoleDirective(currentAgent.canonicalRole);
-          return {
-            block: true,
-            reason: `[HITM Role Violation]: Shell file mutation blocked. ${directive}`
-          };
-        }
-
-        if (
-          cmd.includes('git push') ||
-          cmd.includes('git reset --hard') ||
-          cmd.includes('git checkout -f') ||
-          cmd.includes('rm -rf src') ||
-          cmd.includes('rm -rf tests')
-        ) {
-          return {
-            block: true,
-            reason: `[HITM Authority Violation]: Agent ${AgentRosterService.formatBadge(currentAgent)} is forbidden from executing destructive command: '${cmd}'.`
-          };
-        }
-      }
-    });
-
     // 1. Hook session_start: Immediate check on startup/reload
     (pi as any).on('session_start', async (_event: any, ctx: ExtensionContext) => {
       updateFooterStatus(ctx);
@@ -745,4 +700,4 @@ You have ZERO state transition authority. Transitions are strictly governed by P
       updateFooterStatus(ctx);
     }
   });
-}
+  }
