@@ -25,6 +25,7 @@ import { AGENT_TASK_CATALOG } from './domain/agents/AgentTaskCatalog.js';
 import { PathCapabilityEnforcer } from './domain/repository/PathCapability.js';
 import { ARTIFACT_SKELETONS } from './domain/artifacts/ArtifactSkeletons.js';
 import { WorkflowIdentityService, WorkflowIdentity } from './domain/workflow/WorkflowIdentity.js';
+import { promptPlanningIntentGate } from './domain/workflow/PlanningIntent.js';
 
 export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   const root = process.cwd();
@@ -744,7 +745,23 @@ You have ZERO state transition authority. Transitions are strictly governed by P
 
       // CASE A: Model produced valid JSON artifact -> Immediate HITM promotion modal
       if (ingestion.success && ingestion.artifact) {
-        const target = getTargetTransitionForArtifact(currentState, expectedType);
+        let target = getTargetTransitionForArtifact(currentState, expectedType);
+
+        // Planning Intent Gate: if PLANNING → SPRINT_READY and no MasterSpecification,
+        // present the intent gate before proceeding.
+        if (currentState === 'PLANNING' && target === 'SPRINT_READY') {
+          const intentResult = await promptPlanningIntentGate(ctx.ui, artifactStore, ingestion.artifact);
+          if (intentResult.action === 'specification') {
+            target = 'SPECIFICATION';  // T-035
+          } else if (intentResult.action === 'continue') {
+            ctx.ui.notify('Returning to planning discussion.', 'info');
+            return;
+          } else if (intentResult.action === 'surgical' && intentResult.payload) {
+            // Re-ingest artifact with surgical flags
+            ingestion.artifact.payload = intentResult.payload;
+          }
+        }
+
         if (target) {
           const confirmed = await ctx.ui.confirm(
             'HITM Step Authorization',

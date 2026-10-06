@@ -231,7 +231,12 @@ describe('Executable Transition Guard System (Normative §21, §23)', () => {
         documentationRefs: []
       }
     });
-    await controller.transition('SPRINT_READY', { actorType: 'AGENT', actorId: '0048' });
+
+    // Transition back to PLANNING (T-002C)
+    await controller.transition('PLANNING', { actorType: 'AGENT', actorId: '0048' });
+
+    // Transition to SPRINT_READY (T-030B)
+    await controller.transition('SPRINT_READY', { actorType: 'AGENT', actorId: '0036' }, { humanApproved: true });
     await controller.transition('TEST_AUTHORING', { actorType: 'SYSTEM', actorId: '0000' });
 
     // Attempting TEST_READY without submitted TestSpecification must fail G-ART-025

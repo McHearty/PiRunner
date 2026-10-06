@@ -1,0 +1,998 @@
+{
+  "generated": "2026-10-06T15:39:18.374Z",
+  "summary": {
+    "totalTransitions": 65,
+    "automatic": 44,
+    "agentCompletion": 5,
+    "humanDecision": 16,
+    "explicitHitmUi": 0,
+    "genericCommandOnly": 16,
+    "withIssues": 37
+  },
+  "transitions": [
+    {
+      "id": "T-000",
+      "from": "PROJECT_DISCOVERY",
+      "to": "CONCEPT",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-PROJECT-001",
+        "G-PROJECT-002",
+        "G-REPO-000"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-001A",
+      "from": "PROJECT_DISCOVERY",
+      "to": "PROJECT_INTAKE",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-PROJECT-003",
+        "G-PROJECT-004",
+        "G-REPO-000"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-001B",
+      "from": "PROJECT_DISCOVERY",
+      "to": "STATE_RECOVERY",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-PROJECT-005",
+        "G-PROJECT-006",
+        "G-REPO-000"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-002A",
+      "from": "PROJECT_INTAKE",
+      "to": "PROJECT_BASELINE",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-REPO-001A",
+        "G-PROJECT-007"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-002B",
+      "from": "PROJECT_BASELINE",
+      "to": "KNOWLEDGE_SYNC",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-PROJECT-008",
+        "G-REPO-002A"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-002C",
+      "from": "KNOWLEDGE_SYNC",
+      "to": "PLANNING",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-022"
+      ],
+      "triggerCategory": "AGENT_COMPLETION_GATE",
+      "uiExposure": [
+        "ARTIFACT_TRIGGERED",
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-003A",
+      "from": "STATE_RECOVERY",
+      "to": "STATE_VALIDATION",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-STATE-001",
+        "G-STATE-002",
+        "G-STATE-003"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-003B",
+      "from": "STATE_VALIDATION",
+      "to": "*",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-STATE-006",
+        "G-STATE-007",
+        "G-STATE-008",
+        "G-STATE-009",
+        "G-STATE-010"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-003C",
+      "from": "STATE_VALIDATION",
+      "to": "REPOSITORY_CONFLICT",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-STATE-011"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-010",
+      "from": "CONCEPT",
+      "to": "CONCEPT_REVIEW",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-001"
+      ],
+      "triggerCategory": "AGENT_COMPLETION_GATE",
+      "uiExposure": [
+        "ARTIFACT_TRIGGERED",
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-011",
+      "from": "CONCEPT_REVIEW",
+      "to": "SPECIFICATION",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-ART-003"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    },
+    {
+      "id": "T-012",
+      "from": "CONCEPT_REVIEW",
+      "to": "HUMAN_GATE",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-ART-005"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    },
+    {
+      "id": "T-020",
+      "from": "SPECIFICATION",
+      "to": "SPECIFICATION_REVIEW",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-010"
+      ],
+      "triggerCategory": "AGENT_COMPLETION_GATE",
+      "uiExposure": [
+        "ARTIFACT_TRIGGERED",
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-021",
+      "from": "SPECIFICATION_REVIEW",
+      "to": "PLANNING",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-ART-013"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    },
+    {
+      "id": "T-022",
+      "from": "SPECIFICATION_REVIEW",
+      "to": "HUMAN_GATE",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-ART-015"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    },
+    {
+      "id": "T-030",
+      "from": "PLANNING",
+      "to": "KNOWLEDGE_SYNC",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-020"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-030B",
+      "from": "PLANNING",
+      "to": "SPRINT_READY",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-ART-020",
+        "G-ART-022",
+        "G-ART-026"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "ARTIFACT_TRIGGERED",
+        "CONTROL_AUTO",
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    },
+    {
+      "id": "T-035",
+      "from": "PLANNING",
+      "to": "SPECIFICATION",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-020"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-032",
+      "from": "KNOWLEDGE_SYNC",
+      "to": "HUMAN_GATE",
+      "humanApproval": "ON_LIMIT_EXCEEDED",
+      "guards": [
+        "G-KNOW-005"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-040",
+      "from": "SPRINT_READY",
+      "to": "TEST_AUTHORING",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-023",
+        "G-ART-024",
+        "G-TEST-001",
+        "G-REPO-012"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-041",
+      "from": "TEST_AUTHORING",
+      "to": "TEST_READY",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-025",
+        "G-TEST-006",
+        "G-TEST-007"
+      ],
+      "triggerCategory": "AGENT_COMPLETION_GATE",
+      "uiExposure": [
+        "ARTIFACT_TRIGGERED",
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-042",
+      "from": "TEST_AUTHORING",
+      "to": "TRIAGE",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-TEST-010"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-043",
+      "from": "TEST_AUTHORING",
+      "to": "HUMAN_GATE",
+      "humanApproval": "ON_LIMIT_EXCEEDED",
+      "guards": [
+        "G-CFG-009"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-050",
+      "from": "TEST_READY",
+      "to": "IMPLEMENTATION",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-030",
+        "G-ART-034",
+        "G-TEST-012",
+        "G-REPO-001"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-051",
+      "from": "IMPLEMENTATION",
+      "to": "COMMIT_CREATED",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-031",
+        "G-ART-032",
+        "G-TEST-013",
+        "G-REPO-003"
+      ],
+      "triggerCategory": "AGENT_COMPLETION_GATE",
+      "uiExposure": [
+        "ARTIFACT_TRIGGERED",
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-052",
+      "from": "IMPLEMENTATION",
+      "to": "TRIAGE",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-STUCK-001"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-053",
+      "from": "IMPLEMENTATION",
+      "to": "AGENT_FAILED",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-RUN-001"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-054",
+      "from": "IMPLEMENTATION",
+      "to": "HUMAN_GATE",
+      "humanApproval": "ON_LIMIT_EXCEEDED",
+      "guards": [
+        "G-CFG-002"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-060",
+      "from": "TRIAGE",
+      "to": "IMPLEMENTATION",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-040"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-061",
+      "from": "TRIAGE",
+      "to": "SPECIFICATION_REVIEW",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-042"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-062",
+      "from": "TRIAGE",
+      "to": "PLANNING",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-044"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-063",
+      "from": "TRIAGE",
+      "to": "KNOWLEDGE_SYNC",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-045"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-064",
+      "from": "TRIAGE",
+      "to": "TEST_AUTHORING",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-048"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-065",
+      "from": "TRIAGE",
+      "to": "HUMAN_GATE",
+      "humanApproval": "ON_LIMIT_EXCEEDED",
+      "guards": [
+        "G-ART-046"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-066",
+      "from": "TRIAGE",
+      "to": "ABORT",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-ART-047"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "CONTROL_AUTO",
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    },
+    {
+      "id": "T-070",
+      "from": "COMMIT_CREATED",
+      "to": "REVIEW",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-050",
+        "G-TEST-016"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-071",
+      "from": "REVIEW",
+      "to": "SPRINT_ACCEPTED",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-051",
+        "G-TEST-019"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-072",
+      "from": "REVIEW",
+      "to": "REWORK",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-055"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-073",
+      "from": "REVIEW",
+      "to": "TRIAGE",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-056"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-074",
+      "from": "REVIEW",
+      "to": "HUMAN_GATE",
+      "humanApproval": "ON_LIMIT_EXCEEDED",
+      "guards": [
+        "G-CFG-005"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-075",
+      "from": "REWORK",
+      "to": "IMPLEMENTATION",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-057"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-080",
+      "from": "SPRINT_ACCEPTED",
+      "to": "PUSH_GATE",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-060",
+        "G-REPO-006"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-081",
+      "from": "PUSH_GATE",
+      "to": "REMOTE_PUBLISHED",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-HUMAN-001"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    },
+    {
+      "id": "T-082",
+      "from": "PUSH_GATE",
+      "to": "HUMAN_GATE",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-REPO-008"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    },
+    {
+      "id": "T-083",
+      "from": "REMOTE_PUBLISHED",
+      "to": "SPRINT_COMPLETE",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-REPO-009"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-084",
+      "from": "SPRINT_COMPLETE",
+      "to": "SPRINT_READY",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-PLAN-001"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-085",
+      "from": "SPRINT_COMPLETE",
+      "to": "DAY_COMPLETE",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-TIME-001"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-090",
+      "from": "DAY_COMPLETE",
+      "to": "DIARY",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-EVT-001"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-091",
+      "from": "DIARY",
+      "to": "PUBLICATION_READY",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-070"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-092",
+      "from": "DIARY",
+      "to": "PUBLISHED",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-ART-071"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-093",
+      "from": "PUBLICATION_READY",
+      "to": "PUBLISHED",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-ART-072",
+        "G-HUMAN-002"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "CONTROL_AUTO",
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    },
+    {
+      "id": "T-094",
+      "from": "DIARY",
+      "to": "SKILL_SYNTHESIS",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-EVT-001"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-095",
+      "from": "SKILL_SYNTHESIS",
+      "to": "PUBLICATION_READY",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-SKILL-001"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "CONTROL_AUTO",
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    },
+    {
+      "id": "T-096",
+      "from": "PLANNING",
+      "to": "SKILL_SYNTHESIS",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-ART-020"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "CONTROL_AUTO",
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    },
+    {
+      "id": "T-097",
+      "from": "SKILL_SYNTHESIS",
+      "to": "PLANNING",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-SKILL-001"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [
+        "CONTROL_AUTO"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-100",
+      "from": "*",
+      "to": "ARTIFACT_INVALID",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-VAL-001"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-101",
+      "from": "ARTIFACT_INVALID",
+      "to": "HUMAN_GATE",
+      "humanApproval": "ON_LIMIT_EXCEEDED",
+      "guards": [
+        "G-CFG-006"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-102",
+      "from": "*",
+      "to": "REPOSITORY_CONFLICT",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-REPO-010"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-103",
+      "from": "REPOSITORY_CONFLICT",
+      "to": "HUMAN_GATE",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-REPO-011"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    },
+    {
+      "id": "T-103A",
+      "from": "REPOSITORY_CONFLICT",
+      "to": "PROJECT_INTAKE",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-REPO-000"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    },
+    {
+      "id": "T-103B",
+      "from": "REPOSITORY_CONFLICT",
+      "to": "STATE_VALIDATION",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-REPO-000"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    },
+    {
+      "id": "T-103C",
+      "from": "REPOSITORY_CONFLICT",
+      "to": "KNOWLEDGE_SYNC",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-REPO-000"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    },
+    {
+      "id": "T-104",
+      "from": "AGENT_FAILED",
+      "to": "TRIAGE",
+      "humanApproval": "NEVER",
+      "guards": [
+        "G-RUN-002"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-105",
+      "from": "AGENT_FAILED",
+      "to": "HUMAN_GATE",
+      "humanApproval": "ON_LIMIT_EXCEEDED",
+      "guards": [
+        "G-RUN-003"
+      ],
+      "triggerCategory": "AUTOMATIC",
+      "uiExposure": [],
+      "issues": [
+        "Automatic transition with no trigger path defined"
+      ]
+    },
+    {
+      "id": "T-106",
+      "from": "*",
+      "to": "ABORT",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-HUMAN-003"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "GENERIC_COMMAND_ONLY"
+      ],
+      "issues": [
+        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
+      ]
+    }
+  ]
+}

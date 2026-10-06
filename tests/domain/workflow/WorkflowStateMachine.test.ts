@@ -69,10 +69,11 @@ describe('Workflow Pure Reducer (Normative §9, §15)', () => {
       createEvent(3, 'SPECIFICATION', 'SPECIFICATION_REVIEW'),
       createEvent(4, 'SPECIFICATION_REVIEW', 'PLANNING'),
       createEvent(5, 'PLANNING', 'KNOWLEDGE_SYNC'),
-      createEvent(6, 'KNOWLEDGE_SYNC', 'SPRINT_READY'),
-      createEvent(7, 'SPRINT_READY', 'TEST_AUTHORING'),
-      createEvent(8, 'TEST_AUTHORING', 'TEST_READY'),
-      createEvent(9, 'TEST_READY', 'IMPLEMENTATION')
+      createEvent(6, 'KNOWLEDGE_SYNC', 'PLANNING'),
+      createEvent(7, 'PLANNING', 'SPRINT_READY'),
+      createEvent(8, 'SPRINT_READY', 'TEST_AUTHORING'),
+      createEvent(9, 'TEST_AUTHORING', 'TEST_READY'),
+      createEvent(10, 'TEST_READY', 'IMPLEMENTATION')
     ];
 
     const finalState = reduceWorkflowEvents('PROJECT_DISCOVERY', events);
