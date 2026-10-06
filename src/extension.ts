@@ -160,7 +160,21 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   workflowId = resolved.workflowId;
   let controller = resolved.controller;
 
+  // Control/readiness states have no active specialist agent.
+  // These are gates, not work states: SPRINT_READY, TEST_READY,
+  // COMMIT_CREATED, SPRINT_ACCEPTED, PUSH_GATE, DAY_COMPLETE, etc.
+  const CONTROL_STATES: Set<string> = new Set([
+    'SPRINT_READY', 'TEST_READY', 'COMMIT_CREATED', 'SPRINT_ACCEPTED',
+    'PUSH_GATE', 'DAY_COMPLETE', 'REMOTE_PUBLISHED', 'SPRINT_COMPLETE',
+    'PUBLISHED', 'CONCEPT_REVIEW', 'SPECIFICATION_REVIEW', 'REWORK',
+    'HUMAN_GATE', 'STATE_RECOVERY', 'STATE_VALIDATION', 'ARTIFACT_INVALID',
+    'REPOSITORY_CONFLICT', 'AGENT_FAILED', 'ABORT'
+  ]);
+
   function syncAgentToState(state: WorkflowState): string {
+    if (CONTROL_STATES.has(state)) {
+      throw new Error(`State [${state}] has no active agent role (control state)`);
+    }
     const roleMap: Record<string, CanonicalRole> = {
       CONCEPT: 'CONCEPT',
       SPECIFICATION: 'SPECIFICATION',
@@ -174,11 +188,17 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
       SKILL_SYNTHESIS: 'SKILL_ARCHITECT',
       PUBLICATION_READY: 'PUBLICATION'
     };
-    const canonicalRole = roleMap[state] || 'CONCEPT';
+    const canonicalRole = roleMap[state];
+    if (!canonicalRole) {
+      throw new Error(`State [${state}] has no active agent role`);
+    }
     return roster[canonicalRole].id;
   }
 
-  function getActiveAgentEntry(state: WorkflowState): AgentRosterEntry {
+  function getActiveAgentEntry(state: WorkflowState): AgentRosterEntry | null {
+    if (CONTROL_STATES.has(state)) {
+      return null;
+    }
     const roleMap: Record<string, CanonicalRole> = {
       CONCEPT: 'CONCEPT',
       SPECIFICATION: 'SPECIFICATION',
@@ -192,7 +212,10 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
       SKILL_SYNTHESIS: 'SKILL_ARCHITECT',
       PUBLICATION_READY: 'PUBLICATION'
     };
-    const canonicalRole = roleMap[state] || 'CONCEPT';
+    const canonicalRole = roleMap[state];
+    if (!canonicalRole) {
+      return null;
+    }
     return roster[canonicalRole];
   }
 
@@ -224,10 +247,21 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     return null;
   }
 
+  // Control states with deterministic automatic next transitions.
+  // These have humanApproval: NEVER in the transition registry.
+  function getTargetTransitionForControlState(state: WorkflowState): WorkflowState | null {
+    switch (state) {
+      case 'SPRINT_READY':
+        return 'TEST_AUTHORING';  // T-040
+      default:
+        return null;
+    }
+  }
+
   function updateFooterStatus(ctx?: ExtensionContext) {
     const state = controller.getState();
     const agent = getActiveAgentEntry(state);
-    const badge = AgentRosterService.formatBadge(agent);
+    const badge = agent ? AgentRosterService.formatBadge(agent) : `[${state}] (no active agent)`;
     if (ctx && (ctx.ui as any)?.setStatus) {
       (ctx.ui as any).setStatus('hitm-agent', badge);
     }
@@ -235,6 +269,9 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
 
   function buildRoleWrappedPrompt(promptText: string, state: WorkflowState): string {
     const agent = getActiveAgentEntry(state);
+    if (!agent) {
+      return promptText;
+    }
     const expectedType = getExpectedArtifactForState(state);
     const skeleton = expectedType && ARTIFACT_SKELETONS[expectedType] ? ARTIFACT_SKELETONS[expectedType] : '';
 
@@ -439,7 +476,9 @@ ${deliverableInstruction}`;
         updateFooterStatus(ctx);
         const knowledgeAgent = getActiveAgentEntry('KNOWLEDGE_SYNC');
         ctx.ui.notify(`Project baseline established with ${uncommitted.length} preserved file(s). State is now [KNOWLEDGE_SYNC].`, 'info');
-        await promptAgentHandoff(knowledgeAgent, 'KNOWLEDGE_SYNC', ctx);
+        if (knowledgeAgent) {
+          await promptAgentHandoff(knowledgeAgent, 'KNOWLEDGE_SYNC', ctx);
+        }
       } catch (error) {
         // RCA-2: Transition failures must not terminate the extension.
         // Record the error and re-prompt with actionable choices.
@@ -481,7 +520,9 @@ ${deliverableInstruction}`;
       await controller.transition(recovery.canonicalState, { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MATCH' } });
       ctx.ui.notify(`Conflict resolved. Resumed canonical state [${controller.getState()}].`, 'info');
       const resumedAgent = getActiveAgentEntry(controller.getState());
-      await promptAgentHandoff(resumedAgent, controller.getState(), ctx);
+      if (resumedAgent) {
+        await promptAgentHandoff(resumedAgent, controller.getState(), ctx);
+      }
     } else {
       ctx.ui.notify(`Conflict persists after resolution: ${validation.reasons.join(', ')}`, 'error');
     }
@@ -556,7 +597,9 @@ ${deliverableInstruction}`;
             await controller.transition(recovery.canonicalState, { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MATCH' } });
             ctx.ui.notify(`Resumed canonical workflow state [${controller.getState()}].`, 'info');
             const agent = getActiveAgentEntry(controller.getState());
-            await promptAgentHandoff(agent, controller.getState(), ctx);
+            if (agent) {
+              await promptAgentHandoff(agent, controller.getState(), ctx);
+            }
           }
         } else if (discovery.entryMode === 'ADOPT_EXISTING_PROJECT') {
           await controller.transition('PROJECT_INTAKE', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' } });
@@ -568,7 +611,9 @@ ${deliverableInstruction}`;
           updateFooterStatus(ctx);
           const knowledgeAgent = getActiveAgentEntry('KNOWLEDGE_SYNC');
           ctx.ui.notify('Adopted existing repository. State is [KNOWLEDGE_SYNC].', 'info');
-          await promptAgentHandoff(knowledgeAgent, 'KNOWLEDGE_SYNC', ctx);
+          if (knowledgeAgent) {
+            await promptAgentHandoff(knowledgeAgent, 'KNOWLEDGE_SYNC', ctx);
+          }
         }
       }
 
@@ -585,7 +630,11 @@ ${deliverableInstruction}`;
         return;
       }
 
+      // Control states have no active agent; don't wrap the prompt.
       const agent = getActiveAgentEntry(state);
+      if (!agent) {
+        return null;
+      }
       const expectedType = getExpectedArtifactForState(state);
 
       if (cachedPiInitialPrompt === null && event?.systemPrompt) {
@@ -626,7 +675,7 @@ You have ZERO state transition authority. Transitions are strictly governed by P
       const currentAgent = getActiveAgentEntry(currentState);
       const expectedType = getExpectedArtifactForState(currentState);
 
-      if (!expectedType) return;
+      if (!expectedType || !currentAgent) return;
 
       let rawText = '';
       if (Array.isArray(event?.messages)) {
@@ -677,11 +726,20 @@ You have ZERO state transition authority. Transitions are strictly governed by P
                 humanApproved: true,
                 artifactIds: [ingestion.artifact.artifactId]
               });
+
+              // Automatic advancement from control states to next work state.
+              // SPRINT_READY has no active agent; advance to TEST_AUTHORING via T-040.
+              while (CONTROL_STATES.has(controller.getState())) {
+                const autoTarget = getTargetTransitionForControlState(controller.getState());
+                if (!autoTarget) break;
+                await controller.transition(autoTarget, { actorType: 'SYSTEM', actorId: '0000' });
+                ctx.ui.notify(`Auto-advanced to [${controller.getState()}]`, 'info');
+              }
+
               updateFooterStatus(ctx);
-              ctx.ui.notify(`State advanced to [${controller.getState()}]`, 'info');
 
               const nextAgent = getActiveAgentEntry(controller.getState());
-              if (nextAgent.canonicalRole !== currentAgent.canonicalRole) {
+              if (nextAgent && nextAgent.canonicalRole !== currentAgent.canonicalRole) {
                 await promptAgentHandoff(nextAgent, controller.getState(), ctx);
               }
             } catch (err: any) {
@@ -713,7 +771,11 @@ You have ZERO state transition authority. Transitions are strictly governed by P
     handler: async (_args: string, ctx: ExtensionContext) => {
       const state = controller.getState();
       const agent = getActiveAgentEntry(state);
-      await promptAgentHandoff(agent, state, ctx);
+      if (agent) {
+        await promptAgentHandoff(agent, state, ctx);
+      } else {
+        ctx.ui.notify(`No active agent in state [${state}] (control state)`, 'info');
+      }
     }
   });
 
@@ -729,7 +791,7 @@ You have ZERO state transition authority. Transitions are strictly governed by P
     handler: async (_args: string, ctx: ExtensionContext) => {
       const state = controller.getState();
       const agent = getActiveAgentEntry(state);
-      const badge = AgentRosterService.formatBadge(agent);
+      const badge = agent ? AgentRosterService.formatBadge(agent) : '(none)';
       updateFooterStatus(ctx);
 
       const lock = TestSuiteLock.loadLock();
@@ -751,8 +813,12 @@ You have ZERO state transition authority. Transitions are strictly governed by P
     description: 'View layered governance sub-prompt for the active agent',
     handler: async (_args: string, ctx: ExtensionContext) => {
       const agent = getActiveAgentEntry(controller.getState());
-      const prompt = AgentPromptFactory.createAgentSystemPrompt(agent.canonicalRole);
-      ctx.ui.notify(`Active Sub-Prompt Loaded for ${AgentRosterService.formatBadge(agent)} (${prompt.length} chars)`, 'info');
+      if (agent) {
+        const prompt = AgentPromptFactory.createAgentSystemPrompt(agent.canonicalRole);
+        ctx.ui.notify(`Active Sub-Prompt Loaded for ${AgentRosterService.formatBadge(agent)} (${prompt.length} chars)`, 'info');
+      } else {
+        ctx.ui.notify(`No active agent in state [${controller.getState()}] (control state)`, 'info');
+      }
     }
   });
 
@@ -787,12 +853,24 @@ You have ZERO state transition authority. Transitions are strictly governed by P
       if (confirmed) {
         try {
           await controller.transition(target, { actorType: 'HUMAN', actorId: 'lead-human' }, { humanApproved: true });
+
+          // Auto-advance from control states
+          while (CONTROL_STATES.has(controller.getState())) {
+            const autoTarget = getTargetTransitionForControlState(controller.getState());
+            if (!autoTarget) break;
+            await controller.transition(autoTarget, { actorType: 'SYSTEM', actorId: '0000' });
+            ctx.ui.notify(`Auto-advanced to [${controller.getState()}]`, 'info');
+          }
+
           updateFooterStatus(ctx);
           const newAgent = getActiveAgentEntry(controller.getState());
-          ctx.ui.notify(`State advanced to [${controller.getState()}] | Active: ${AgentRosterService.formatBadge(newAgent)}`, 'info');
-
-          if (newAgent.canonicalRole !== oldAgent.canonicalRole) {
-            await promptAgentHandoff(newAgent, controller.getState(), ctx);
+          if (newAgent) {
+            ctx.ui.notify(`State advanced to [${controller.getState()}] | Active: ${AgentRosterService.formatBadge(newAgent)}`, 'info');
+            if (!oldAgent || newAgent.canonicalRole !== oldAgent.canonicalRole) {
+              await promptAgentHandoff(newAgent, controller.getState(), ctx);
+            }
+          } else {
+            ctx.ui.notify(`State advanced to [${controller.getState()}] (control state, no active agent)`, 'info');
           }
         } catch (err: any) {
           ctx.ui.notify(`Transition rejected: ${err.message}`, 'error');
