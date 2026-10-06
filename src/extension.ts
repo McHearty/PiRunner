@@ -400,41 +400,49 @@ ${deliverableInstruction}`;
       };
       eventStore.append(resolutionEvent);
 
-      // If resuming an existing workflow, continue from recovered state
-      if (discovery.entryMode === 'RESUME_WORKFLOW' && eventStore.getEvents(workflowId).length > 0) {
-        const recovery = StateRecoveryService.recover(eventStore as any, workflowId);
-        if (recovery.recovered) {
-          await controller.transition('STATE_RECOVERY', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'RESUME_WORKFLOW' } });
-          await controller.transition('STATE_VALIDATION', { actorType: 'SYSTEM', actorId: '0000' });
-          await controller.transition(recovery.canonicalState, { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MATCH' } });
-          ctx.ui.notify(`Resumed canonical workflow state [${controller.getState()}] after PRESERVE resolution.`, 'info');
-          const agent = getActiveAgentEntry(controller.getState());
-          updateFooterStatus(ctx);
-          await promptAgentHandoff(agent, controller.getState(), ctx);
-          return;
+      try {
+        // Ensure we're in REPOSITORY_CONFLICT state before resolving the conflict.
+        // This uses the proper conflict resolution transition path (T-103A) rather
+        // than the fresh-start adoption path (T-001A) which has the G-PROJECT-004
+        // guard that fails when canonical history already exists.
+        if (controller.getState() !== 'REPOSITORY_CONFLICT') {
+          await controller.transition('REPOSITORY_CONFLICT', { actorType: 'SYSTEM', actorId: '0000' });
         }
-      }
 
-      // If adopting, establish baseline and proceed
-      const baseline = ProjectIntakeService.createBaselineArtifact(workflowId, freshSnap, gitRepo, root);
-      baseline.payload.workingTreeState = 'DIRTY';
-      baseline.payload.detectedUncommittedChanges = uncommitted;
-      artifactStore.save(baseline);
+        // Create baseline artifact with dirty working tree state
+        const baseline = ProjectIntakeService.createBaselineArtifact(workflowId, freshSnap, gitRepo, root);
+        baseline.payload.workingTreeState = 'DIRTY';
+        baseline.payload.detectedUncommittedChanges = uncommitted;
+        artifactStore.save(baseline);
 
-      if (controller.getState() === 'PROJECT_DISCOVERY') {
-        await controller.transition('PROJECT_INTAKE', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' } });
-      }
-      if (controller.getState() !== 'PROJECT_BASELINE') {
-        await controller.transition('PROJECT_BASELINE', { actorType: 'SYSTEM', actorId: '0000' });
-      }
-      if (controller.getState() !== 'KNOWLEDGE_SYNC') {
-        await controller.transition('KNOWLEDGE_SYNC', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { preserveDirty: true } });
-      }
+        // Resolve conflict: transition to PROJECT_INTAKE via T-103A
+        // (REPOSITORY_CONFLICT → PROJECT_INTAKE, humanApproval: ALWAYS)
+        await controller.transition('PROJECT_INTAKE', { actorType: 'HUMAN', actorId: 'lead-human' }, {
+          humanApproved: true,
+          metadata: { resolution: 'PRESERVE' }
+        });
 
-      updateFooterStatus(ctx);
-      const knowledgeAgent = getActiveAgentEntry('KNOWLEDGE_SYNC');
-      ctx.ui.notify(`Project baseline established with ${uncommitted.length} preserved file(s). State is now [KNOWLEDGE_SYNC].`, 'info');
-      await promptAgentHandoff(knowledgeAgent, 'KNOWLEDGE_SYNC', ctx);
+        // Continue to baseline and knowledge sync
+        if (controller.getState() !== 'PROJECT_BASELINE') {
+          await controller.transition('PROJECT_BASELINE', { actorType: 'SYSTEM', actorId: '0000' });
+        }
+        if (controller.getState() !== 'KNOWLEDGE_SYNC') {
+          await controller.transition('KNOWLEDGE_SYNC', { actorType: 'SYSTEM', actorId: '0000' }, {
+            metadata: { preserveDirty: true }
+          });
+        }
+
+        updateFooterStatus(ctx);
+        const knowledgeAgent = getActiveAgentEntry('KNOWLEDGE_SYNC');
+        ctx.ui.notify(`Project baseline established with ${uncommitted.length} preserved file(s). State is now [KNOWLEDGE_SYNC].`, 'info');
+        await promptAgentHandoff(knowledgeAgent, 'KNOWLEDGE_SYNC', ctx);
+      } catch (error) {
+        // RCA-2: Transition failures must not terminate the extension.
+        // Record the error and re-prompt with actionable choices.
+        const err = error as Error;
+        ctx.ui.notify(`PRESERVE transition failed: ${err.message}`, 'error');
+        await promptConflictResolution(ctx);
+      }
       return;
     }
 
