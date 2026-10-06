@@ -118,7 +118,7 @@ export class WorkflowController {
       }
     }
 
-    const freshRepoSnapshot = this.repository.getFreshSnapshot();
+    const freshRepoSnapshot = await this.repository.getFreshSnapshot();
     const effectiveRepo = this.repositorySnapshot || freshRepoSnapshot;
 
     const guardContext: GuardContext = {

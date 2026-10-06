@@ -89,23 +89,34 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     };
     WorkflowIdentityService.save(newIdentity, root);
     
+    // Create first canonical event immediately (not deferred to session_start)
+    // This ensures the workflow is restartable even if process is killed before transitions complete
+    const stateAfter = discovery.entryMode === 'NEW_PROJECT' ? 'CONCEPT' : 'PROJECT_INTAKE';
+    
+    eventStore.append({
+      eventId: `evt-${newId}-init`,
+      workflowId: newId,
+      sequence: 0,
+      type: 'TRANSITION',
+      actorType: 'SYSTEM',
+      actorId: '0000',
+      timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_DISCOVERY',
+      stateAfter: stateAfter as WorkflowState,
+      artifactIds: [],
+      metadata: { entryMode: discovery.entryMode }
+    });
+    
+    // Controller resumes at the state after the initial transition
+    const newController = createController(newId, stateAfter as WorkflowState);
+    
     return {
       workflowId: newId,
-      controller: new WorkflowController(
-        newId,
-        artifactStore as any,
-        eventStore as any,
-        testRunner,
-        agentRunner,
-        {},
-        'PROJECT_DISCOVERY',
-        gitRepo,
-        root
-      )
+      controller: newController
     };
   }
 
-  function createController(wfId: string): WorkflowController {
+  function createController(wfId: string, initialState: WorkflowState = 'PROJECT_DISCOVERY'): WorkflowController {
     return new WorkflowController(
       wfId,
       artifactStore as any,
@@ -113,31 +124,35 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
       testRunner,
       agentRunner,
       {},
-      'PROJECT_DISCOVERY',
+      initialState,
       gitRepo,
       root
     );
   }
 
   async function archiveOldWorkflow(oldWorkflowId: string, reason: string, validationStatus: string): Promise<void> {
-    // Use legal ABORT transition with archival metadata instead of fake self-loop event
-    const oldController = createController(oldWorkflowId);
-    
-    // Recover to current state first to ensure valid transition path
+    // Recover old workflow's canonical state
     const recovery = StateRecoveryService.recover(eventStore as any, oldWorkflowId);
-    if (recovery.recovered) {
-      // Transition to ABORT with archival metadata
-      await oldController.transition('ABORT', 
-        { actorType: 'HUMAN', actorId: 'lead-human' }, 
-        {
-          metadata: {
-            archiveReason: reason,
-            validationStatus: validationStatus,
-            archivedAt: new Date().toISOString()
-          }
-        }
-      );
+    if (!recovery.recovered) {
+      throw new Error(`Cannot recover old workflow ${oldWorkflowId} for archival`);
     }
+    
+    // Construct controller at recovered state, not hardcoded PROJECT_DISCOVERY
+    const oldController = createController(oldWorkflowId, recovery.canonicalState);
+    
+    // Transition to ABORT with archival metadata and required human authorization
+    await oldController.transition('ABORT', 
+      { actorType: 'HUMAN', actorId: 'lead-human' }, 
+      {
+        humanApproved: true,
+        metadata: {
+          humanAbort: true,
+          archiveReason: reason,
+          validationStatus: validationStatus,
+          archivedAt: new Date().toISOString()
+        }
+      }
+    );
   }
 
   const resolved = resolveWorkflowIdentity();

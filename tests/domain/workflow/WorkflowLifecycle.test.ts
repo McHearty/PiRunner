@@ -223,4 +223,119 @@ describe('Workflow Lifecycle (Sprint 8)', () => {
     expect(recovery.recovered).toBe(true);
     expect(recovery.canonicalState).toBe('ABORT');
   });
+
+  it('P0-1: archival through controller transition works end-to-end', async () => {
+    const store = new FileEventStore(testDir);
+    const wfId = 'archive-test-wf';
+    
+    // Create workflow with some transitions
+    store.append({
+      eventId: 'evt-arc-0', workflowId: wfId, sequence: 0, type: 'T',
+      actorType: 'SYSTEM', actorId: '0', timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_DISCOVERY', stateAfter: 'PROJECT_INTAKE',
+      artifactIds: [], metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' }
+    });
+    
+    store.append({
+      eventId: 'evt-arc-1', workflowId: wfId, sequence: 1, type: 'T',
+      actorType: 'SYSTEM', actorId: '0', timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_INTAKE', stateAfter: 'PROJECT_BASELINE',
+      artifactIds: [], metadata: {}
+    });
+    
+    // Recover to canonical state
+    const recovery = StateRecoveryService.recover(store as any, wfId);
+    expect(recovery.recovered).toBe(true);
+    expect(recovery.canonicalState).toBe('PROJECT_BASELINE');
+    
+    // Construct controller at recovered state (not hardcoded PROJECT_DISCOVERY)
+    const mockRepo = { getHead: () => 'test', getFreshSnapshot: async () => 'test-snapshot' } as any;
+    const controller = new WorkflowController(
+      wfId, null as any, store as any, null as any, null as any,
+      {}, recovery.canonicalState, mockRepo, process.cwd()
+    );
+    
+    // Perform ABORT transition with required human authorization
+    await controller.transition('ABORT', 
+      { actorType: 'HUMAN', actorId: 'lead-human' },
+      {
+        humanApproved: true,
+        metadata: {
+          humanAbort: true,
+          archiveReason: 'test_archival',
+          archivedAt: new Date().toISOString()
+        }
+      }
+    );
+    
+    // Verify archival succeeded
+    const postArchiveRecovery = StateRecoveryService.recover(store as any, wfId);
+    expect(postArchiveRecovery.recovered).toBe(true);
+    expect(postArchiveRecovery.canonicalState).toBe('ABORT');
+    
+    // Verify historical events are intact
+    const events = store.getEvents(wfId);
+    expect(events).toHaveLength(3);
+    expect(events[2].stateAfter).toBe('ABORT');
+    expect(events[2].metadata).toHaveProperty('archiveReason', 'test_archival');
+  });
+
+  it('P0-2: new workflow receives canonical initial event and is restartable', async () => {
+    const store = new FileEventStore(testDir);
+    const ws = join(testDir, 'new-wf-test');
+    if (existsSync(ws)) {
+      rmSync(ws, { recursive: true, force: true });
+    }
+    mkdirSync(ws, { recursive: true });
+    
+    // Create new workflow identity
+    const newId = WorkflowIdentityService.generateNewId('new-wf');
+    const newIdentity: WorkflowIdentity = {
+      workflowId: newId,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString()
+    };
+    WorkflowIdentityService.save(newIdentity, ws);
+    
+    // Create first canonical event (as resolveWorkflowIdentity does)
+    // Mock repo must satisfy G-REPO-000 guard (repository identity established)
+    // Guard checks ctx.repository?.headSha && ctx.repository.branch
+    // where ctx.repository comes from getFreshSnapshot()
+    const mockRepo = {
+      getHead: () => 'test-head-abc123',
+      getBranch: () => 'main',
+      getFreshSnapshot: async () => ({
+        headSha: 'test-head-abc123',
+        branch: 'main',
+        workingTreeState: 'clean'
+      }),
+      getRemoteUrl: () => 'test-url'
+    } as any;
+    const controller = new WorkflowController(
+      newId, null as any, store as any, null as any, null as any,
+      {}, 'PROJECT_DISCOVERY', mockRepo, ws
+    );
+    
+    // Perform initial transition (ADOPT_EXISTING_PROJECT path)
+    await controller.transition('PROJECT_INTAKE', 
+      { actorType: 'SYSTEM', actorId: '0000' },
+      { metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' } }
+    );
+    
+    // Verify first event was created
+    const events = store.getEvents(newId);
+    expect(events).toHaveLength(1);
+    expect(events[0].sequence).toBe(0);
+    expect(events[0].workflowId).toBe(newId);
+    
+    // Simulate restart: construct fresh discovery instance
+    const discovery = ProjectDiscoveryService.inspect(ws);
+    expect(discovery.entryMode).toBe('RESUME_WORKFLOW');
+    expect(discovery.activeWorkflowId).toBe(newId);
+    
+    // Simulate restart: recover by discovered workflowId
+    const recovery = StateRecoveryService.recover(store as any, newId);
+    expect(recovery.recovered).toBe(true);
+    expect(recovery.canonicalState).toBe('PROJECT_INTAKE');
+  });
 });
