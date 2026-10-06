@@ -82,8 +82,18 @@ export const GUARDS: Record<string, GuardDefinition> = {
   },
   'G-PROJECT-006': {
     id: 'G-PROJECT-006',
-    description: 'Workflow identity recoverable',
-    evaluate: () => pass('Workflow identity verified')
+    description: 'Workflow identity recoverable from event history',
+    evaluate: (ctx) => {
+      if (ctx.eventHistory.length === 0) {
+        return fail('No event history to recover workflow identity from');
+      }
+      // Verify all events have the same workflowId
+      const workflowIds = new Set(ctx.eventHistory.map(e => e.workflowId));
+      if (workflowIds.size !== 1) {
+        return fail(`Multiple workflow IDs in event history: ${Array.from(workflowIds).join(', ')}`);
+      }
+      return pass('Workflow identity verified');
+    }
   },
   'G-REPO-000': {
     id: 'G-REPO-000',

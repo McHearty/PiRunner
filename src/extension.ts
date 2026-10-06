@@ -24,6 +24,7 @@ import { GitKnowledgeProvider } from './infrastructure/knowledge/GitKnowledgePro
 import { AGENT_TASK_CATALOG } from './domain/agents/AgentTaskCatalog.js';
 import { PathCapabilityEnforcer } from './domain/repository/PathCapability.js';
 import { ARTIFACT_SKELETONS } from './domain/artifacts/ArtifactSkeletons.js';
+import { WorkflowIdentityService, WorkflowIdentity } from './domain/workflow/WorkflowIdentity.js';
 
 export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   const root = process.cwd();
@@ -36,21 +37,114 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   const knowledgeProvider = new GitKnowledgeProvider(root);
 
   let roster = AgentRosterService.getOrGenerateRoster(root);
-  const workflowId = 'pirunner-canonical';
+  let workflowId: string;
   let discovery = ProjectDiscoveryService.inspect(root);
   let cachedPiInitialPrompt: string | null = null;
 
-  let controller = new WorkflowController(
-    workflowId,
-    artifactStore as any,
-    eventStore as any,
-    testRunner,
-    agentRunner,
-    {},
-    'PROJECT_DISCOVERY',
-    gitRepo,
-    root
-  );
+  // Workflow identity management (Sprint 8)
+  function resolveWorkflowIdentity(): { workflowId: string; controller: WorkflowController } {
+    const identity = WorkflowIdentityService.load(root);
+    
+    if (identity && identity.status === 'ACTIVE') {
+      // Resume existing active workflow
+      return {
+        workflowId: identity.workflowId,
+        controller: new WorkflowController(
+          identity.workflowId,
+          artifactStore as any,
+          eventStore as any,
+          testRunner,
+          agentRunner,
+          {},
+          'PROJECT_DISCOVERY',
+          gitRepo,
+          root
+        )
+      };
+    }
+    
+    // No active workflow or none exists - will be determined by discovery/human gate
+    // For now, use legacy behavior with hardcoded ID for existing workflows
+    if (discovery.entryMode === 'RESUME_WORKFLOW') {
+      // Existing journal without identity file - use legacy ID
+      return {
+        workflowId: 'pirunner-canonical',
+        controller: new WorkflowController(
+          'pirunner-canonical',
+          artifactStore as any,
+          eventStore as any,
+          testRunner,
+          agentRunner,
+          {},
+          'PROJECT_DISCOVERY',
+          gitRepo,
+          root
+        )
+      };
+    }
+    
+    // New workflow
+    const newId = WorkflowIdentityService.generateNewId();
+    const newIdentity: WorkflowIdentity = {
+      workflowId: newId,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString()
+    };
+    WorkflowIdentityService.save(newIdentity, root);
+    
+    return {
+      workflowId: newId,
+      controller: new WorkflowController(
+        newId,
+        artifactStore as any,
+        eventStore as any,
+        testRunner,
+        agentRunner,
+        {},
+        'PROJECT_DISCOVERY',
+        gitRepo,
+        root
+      )
+    };
+  }
+
+  function createController(wfId: string): WorkflowController {
+    return new WorkflowController(
+      wfId,
+      artifactStore as any,
+      eventStore as any,
+      testRunner,
+      agentRunner,
+      {},
+      'PROJECT_DISCOVERY',
+      gitRepo,
+      root
+    );
+  }
+
+  function archiveOldWorkflow(oldWorkflowId: string, reason: string, validationStatus: string): void {
+    const resolutionEvent: any = {
+      eventId: `evt-${oldWorkflowId}-archived-${Date.now()}`,
+      workflowId: oldWorkflowId,
+      sequence: eventStore.getNextSequence(oldWorkflowId),
+      type: 'WORKFLOW_ARCHIVED',
+      actorType: 'HUMAN',
+      actorId: 'lead-human',
+      timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_DISCOVERY',
+      stateAfter: 'PROJECT_DISCOVERY',
+      artifactIds: [],
+      metadata: {
+        reason: reason,
+        validationStatus: validationStatus
+      }
+    };
+    eventStore.append(resolutionEvent);
+  }
+
+  const resolved = resolveWorkflowIdentity();
+  workflowId = resolved.workflowId;
+  let controller = resolved.controller;
 
   function syncAgentToState(state: WorkflowState): string {
     const roleMap: Record<string, CanonicalRole> = {
@@ -393,7 +487,50 @@ ${deliverableInstruction}`;
           );
 
           if (!recovery.recovered || validation.status === 'MISMATCH') {
-            await promptConflictResolution(ctx);
+            // Sprint 8: Offer START NEW WORKFLOW option when resume validation fails
+            const options = [
+              'RESUME: Attempt recovery of existing workflow',
+              'START NEW WORKFLOW: Preserve history and begin new workflow',
+              'ABORT: Leave repository/workflow untouched'
+            ];
+            let choice: string | undefined;
+            if (typeof (ctx.ui as any).select === 'function') {
+              choice = await (ctx.ui as any).select(
+                `Existing workflow validation failed: ${validation.reasons.join(', ')}`, options);
+            } else {
+              const confirmResume = await ctx.ui.confirm(
+                'Existing workflow validation failed',
+                `${validation.reasons.join(', ')}\nAttempt recovery?`
+              );
+              choice = confirmResume ? options[0] : options[2];
+            }
+
+            if (choice && choice.startsWith('RESUME')) {
+              await promptConflictResolution(ctx);
+            } else if (choice && choice.startsWith('START NEW')) {
+              // Archive old workflow and start new
+              ctx.ui.notify(`Archiving workflow [${workflowId}] and starting new workflow...`, 'info');
+              archiveOldWorkflow(workflowId, 'human_requested_new_workflow', validation.status);
+              
+              // Update identity to new workflow
+              const newId = WorkflowIdentityService.generateNewId();
+              const newIdentity: WorkflowIdentity = {
+                workflowId: newId,
+                status: 'ACTIVE',
+                createdAt: new Date().toISOString()
+              };
+              WorkflowIdentityService.save(newIdentity, root);
+              
+              workflowId = newId;
+              controller = createController(workflowId);
+              discovery = ProjectDiscoveryService.inspect(root);
+              
+              ctx.ui.notify(`New workflow [${workflowId}] created. Starting from discovery.`, 'info');
+              updateFooterStatus(ctx);
+            } else {
+              ctx.ui.notify('Workflow aborted by user.', 'warning');
+              return;
+            }
           } else {
             await controller.transition('STATE_RECOVERY', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'RESUME_WORKFLOW' } });
             await controller.transition('STATE_VALIDATION', { actorType: 'SYSTEM', actorId: '0000' });

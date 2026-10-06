@@ -4,7 +4,7 @@ import { execSync } from 'node:child_process';
 import { StoredArtifact } from '../artifacts/ArtifactStore.js';
 import { RepositorySnapshot } from '../workflow/Guards.js';
 
-export type ProjectEntryMode = 'NEW_PROJECT' | 'ADOPT_EXISTING_PROJECT' | 'RESUME_WORKFLOW';
+export type ProjectEntryMode = 'NEW_PROJECT' | 'ADOPT_EXISTING_PROJECT' | 'RESUME_WORKFLOW' | 'START_NEW_WORKFLOW';
 
 export interface ProjectDiscoveryResult {
   entryMode: ProjectEntryMode;

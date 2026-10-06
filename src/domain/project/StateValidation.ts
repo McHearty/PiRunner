@@ -123,8 +123,15 @@ export class StateValidationService {
         } else {
           const specPayload = testSpec.payload as any;
           const specRoots = specPayload?.testRootPaths;
-          const specFramework = specPayload?.testFramework || 'vitest';
-          const specCommand = specPayload?.executionCommand || 'npm test';
+          const specFramework = specPayload?.testFramework;
+          const specCommand = specPayload?.executionCommand;
+
+          if (!specFramework) {
+            reasons.push('Cannot validate test suite on resume: Accepted TestSpecification does not specify testFramework');
+          }
+          if (!specCommand) {
+            reasons.push('Cannot validate test suite on resume: Accepted TestSpecification does not specify executionCommand');
+          }
 
           if (!Array.isArray(specRoots) || specRoots.length === 0) {
             reasons.push('Cannot validate test suite on resume: Accepted TestSpecification does not define valid testRootPaths');
