@@ -339,6 +339,26 @@ export const GUARDS: Record<string, GuardDefinition> = {
       return spec ? pass() : fail('No accepted MasterSpecification exists');
     }
   },
+  'G-ART-026': {
+    id: 'G-ART-026',
+    description: 'Either accepted MasterSpecification exists, or SprintSpecification is explicitly marked as surgical/no-governing-spec',
+    evaluate: (ctx) => {
+      // Check for accepted MasterSpecification first
+      const spec = ctx.artifacts.getLatestAccepted('MasterSpecification');
+      if (spec) return pass('Accepted MasterSpecification exists');
+
+      // No MasterSpecification — check if SprintSpecification is marked as surgical
+      const sprint = ctx.artifacts.getByType('SprintSpecification').find(a => a.status === 'ACCEPTED' || a.status === 'SUBMITTED');
+      if (sprint) {
+        const payload = sprint.payload as any;
+        if (payload.surgicalChange === true || payload.noGoverningSpec === true) {
+          return pass('SprintSpecification explicitly marked as surgical/no-governing-spec');
+        }
+      }
+
+      return fail('No accepted MasterSpecification and SprintSpecification not marked as surgical');
+    }
+  },
   'G-TEST-001': {
     id: 'G-TEST-001',
     description: 'No active accepted TestSpecification exists for current sprint without revision',

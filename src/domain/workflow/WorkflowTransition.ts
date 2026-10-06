@@ -49,7 +49,7 @@ export const TRANSITION_REGISTRY: TransitionDefinition[] = [
 
   // §27 Planning & Knowledge Path
   { id: 'T-030', from: 'PLANNING', to: 'KNOWLEDGE_SYNC', guards: [g('G-ART-020')], sideEffects: [{ id: 'SE-EVT-030', description: 'PLAN_SUBMITTED' }], humanApproval: 'NEVER' },
-  { id: 'T-030B', from: 'PLANNING', to: 'SPRINT_READY', guards: [g('G-ART-020'), g('G-ART-022')], sideEffects: [{ id: 'SE-EVT-030B', description: 'PLAN_APPROVED_SPRINT_READY' }], humanApproval: 'ALWAYS' },
+  { id: 'T-030B', from: 'PLANNING', to: 'SPRINT_READY', guards: [g('G-ART-020'), g('G-ART-022'), g('G-ART-026')], sideEffects: [{ id: 'SE-EVT-030B', description: 'PLAN_APPROVED_SPRINT_READY' }], humanApproval: 'ALWAYS' },
   { id: 'T-035', from: 'PLANNING', to: 'SPECIFICATION', guards: [g('G-ART-020')], sideEffects: [{ id: 'SE-EVT-035', description: 'ADOPTION_SPECIFICATION_STARTED' }], humanApproval: 'NEVER' },
   { id: 'T-031', from: 'KNOWLEDGE_SYNC', to: 'SPRINT_READY', guards: [g('G-ART-022')], sideEffects: [{ id: 'SE-EVT-031', description: 'KNOWLEDGE_VERIFIED' }], humanApproval: 'NEVER' },
   { id: 'T-032', from: 'KNOWLEDGE_SYNC', to: 'HUMAN_GATE', guards: [g('G-KNOW-005')], sideEffects: [{ id: 'SE-EVT-032', description: 'KNOWLEDGE_STALE' }], humanApproval: 'ON_LIMIT_EXCEEDED' },

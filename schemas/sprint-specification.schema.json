@@ -5,14 +5,14 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "masterSpecificationArtifactId",
     "sprintNumber",
     "goals",
     "tasks",
     "acceptanceCriteria"
   ],
   "properties": {
-    "masterSpecificationArtifactId": { "type": "string" },
+    "masterSpecificationArtifactId": { "anyOf": [{ "type": "string" }, { "type": "null" }], "description": "Required for feature development; null for surgical bug fixes" },
+    "surgicalChange": { "type": "boolean", "description": "True when this is a surgical change on an existing codebase without a governing MasterSpecification" },
     "sprintNumber": { "type": "integer", "minimum": 1 },
     "goals": {
       "type": "array",
