@@ -40,6 +40,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   let workflowId: string;
   let discovery = ProjectDiscoveryService.inspect(root);
   let cachedPiInitialPrompt: string | null = null;
+  let planningIntent: 'GOVERNED_FEATURE' | 'SURGICAL_CHANGE' | null = null;
 
   // Workflow identity management (Sprint 8)
   function resolveWorkflowIdentity(): { workflowId: string; controller: WorkflowController } {
@@ -288,6 +289,115 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
   }
 
+  // Sprint A: Planning Intent Gate
+  // Check if planning intent has been established for this workflow
+  function getPlanningIntent(): 'GOVERNED_FEATURE' | 'SURGICAL_CHANGE' | null {
+    return planningIntent;
+  }
+
+  // Restore planning intent from event history when resuming
+  function restorePlanningIntentFromHistory(): void {
+    const events = eventStore.getEvents(workflowId);
+    for (const evt of events) {
+      if (evt.type === 'PLANNING_INTENT_ESTABLISHED') {
+        const intent = (evt.metadata as any)?.intent;
+        if (intent === 'GOVERNED_FEATURE' || intent === 'SURGICAL_CHANGE') {
+          planningIntent = intent;
+          return;
+        }
+      }
+    }
+    // Also check for implicit governed intent (accepted MasterSpecification exists)
+    if (artifactStore.getLatestAccepted('MasterSpecification', workflowId)) {
+      planningIntent = 'GOVERNED_FEATURE';
+    }
+  }
+
+  // Present the planning intent gate to the human
+  // Sprint E: Separate conversation from artifact completion
+  // Store the last agent response for explicit artifact production
+  let lastAgentResponse: string | null = null;
+
+  // Sprint B: Present the planning intent gate with Specification path option
+  async function promptPlanningIntent(ctx: ExtensionContext, hasMasterSpec: boolean): Promise<'GOVERNED_FEATURE' | 'SURGICAL_CHANGE' | 'CREATE_SPECIFICATION'> {
+    const options = [
+      '1. Governed feature development (MasterSpecification required)',
+      '2. Surgical change (no governing MasterSpecification)'
+    ];
+
+    // If no accepted MasterSpecification exists, offer the Specification path
+    if (!hasMasterSpec) {
+      options.push('3. Create/revise MasterSpecification first');
+    }
+
+    let choice: string | undefined;
+    if (typeof (ctx.ui as any).select === 'function') {
+      choice = await (ctx.ui as any).select(
+        'Planning Intent — What kind of work are we planning?',
+        options
+      );
+    } else {
+      const confirmGoverned = await ctx.ui.confirm(
+        'Planning Intent',
+        'Are we planning governed feature development requiring a MasterSpecification?\n(Yes = Governed, No = Surgical change)'      );
+      choice = confirmGoverned ? options[0] : options[1];
+    }
+
+    if (choice && choice.startsWith('1.')) {
+      return 'GOVERNED_FEATURE';
+    } else if (choice && choice.startsWith('3.')) {
+      return 'CREATE_SPECIFICATION';
+    } else {
+      return 'SURGICAL_CHANGE';
+    }
+  }
+
+  // Check if we need to present the planning intent gate
+  async function ensurePlanningIntent(ctx: ExtensionContext): Promise<'GOVERNED_FEATURE' | 'SURGICAL_CHANGE' | 'CREATE_SPECIFICATION'> {
+    // First, try to restore from history
+    restorePlanningIntentFromHistory();
+
+    if (planningIntent) {
+      return planningIntent;
+    }
+
+    // Check if we already have an accepted MasterSpecification
+    // If so, intent is implicitly GOVERNED_FEATURE
+    const hasMasterSpec = !!artifactStore.getLatestAccepted('MasterSpecification', workflowId);
+    if (hasMasterSpec) {
+      planningIntent = 'GOVERNED_FEATURE';
+      return 'GOVERNED_FEATURE';
+    }
+
+    // No MasterSpecification — ask the human (with Specification path option)
+    const intent = await promptPlanningIntent(ctx, false);
+    if (intent === 'CREATE_SPECIFICATION') {
+      // Sprint B: Transition to SPECIFICATION via T-035
+      ctx.ui.notify('Routing to Specification authoring...', 'info');
+      // The transition will be handled by the caller
+      return 'CREATE_SPECIFICATION';
+    }
+
+    planningIntent = intent;
+
+    // Persist intent as a canonical event
+    eventStore.append({
+      eventId: `evt-${workflowId}-planning-intent-${Date.now()}`,
+      workflowId,
+      sequence: eventStore.getNextSequence(workflowId),
+      type: 'PLANNING_INTENT_ESTABLISHED',
+      actorType: 'HUMAN',
+      actorId: 'lead-human',
+      timestamp: new Date().toISOString(),
+      stateBefore: controller.getState(),
+      stateAfter: controller.getState(),
+      artifactIds: [],
+      metadata: { intent }
+    });
+
+    return intent;
+  }
+
   function updateFooterStatus(ctx?: ExtensionContext) {
     const state = controller.getState();
     const agent = getActiveAgentEntry(state);
@@ -307,10 +417,19 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
 
     let roleGuidance = '';
     if (state === 'PLANNING') {
+      const intentInfo = planningIntent 
+        ? `\n\nWORK CLASSIFICATION (established by human): ${planningIntent === 'GOVERNED_FEATURE' ? 'Governed feature development — MasterSpecification required' : 'Surgical change — no governing MasterSpecification'}` 
+        : '';
+      const surgicalFlagInstruction = planningIntent === 'SURGICAL_CHANGE' 
+        ? '\n\nIMPORTANT: Since this is a surgical change, set "surgicalChange": true in the SprintSpecification JSON artifact and leave "masterSpecificationArtifactId" as null.' 
+        : '';
+      const governedFlagInstruction = planningIntent === 'GOVERNED_FEATURE' 
+        ? '\n\nIMPORTANT: Since this is governed feature development, set "surgicalChange": false in the SprintSpecification JSON artifact and reference the accepted MasterSpecification in "masterSpecificationArtifactId".' 
+        : '';
       roleGuidance = `
 ROLE DIRECTIVE: You are strictly ${AgentRosterService.formatBadge(agent)} (Planning Specialist).
 The Knowledge Synchronization phase is FINISHED. You are NO LONGER the Knowledge Specialist.
-Do NOT write code or edit files. You have NO permission to edit files.
+Do NOT write code or edit files. You have NO permission to edit files.${intentInfo}${surgicalFlagInstruction}${governedFlagInstruction}
 
 Your primary responsibility is to understand the user's planning intent through conversation.
 When the user is describing goals, asking questions, providing requirements, or exploring work,
@@ -625,6 +744,7 @@ ${deliverableInstruction}`;
             await controller.transition('STATE_RECOVERY', { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { entryMode: 'RESUME_WORKFLOW' } });
             await controller.transition('STATE_VALIDATION', { actorType: 'SYSTEM', actorId: '0000' });
             await controller.transition(recovery.canonicalState, { actorType: 'SYSTEM', actorId: '0000' }, { metadata: { validationStatus: 'MATCH' } });
+            restorePlanningIntentFromHistory();
             ctx.ui.notify(`Resumed canonical workflow state [${controller.getState()}].`, 'info');
             const agent = getActiveAgentEntry(controller.getState());
             if (agent) {
@@ -658,6 +778,17 @@ ${deliverableInstruction}`;
       if (state === 'REPOSITORY_CONFLICT') {
         await promptConflictResolution(ctx);
         return;
+      }
+
+      // Sprint A: Ensure planning intent is established before Planning agent starts
+      // Sprint B: If CREATE_SPECIFICATION, transition to SPECIFICATION via T-035
+      if (state === 'PLANNING') {
+        const intent = await ensurePlanningIntent(ctx);
+        if (intent === 'CREATE_SPECIFICATION') {
+          ctx.ui.notify('Transitioning to Specification authoring (T-035)...', 'info');
+          await controller.transition('SPECIFICATION', { actorType: 'HUMAN', actorId: 'lead-human' });
+          return null; // Don't start Planning agent; we've transitioned to SPECIFICATION
+        }
       }
 
       // Control states have no active agent; don't wrap the prompt.
@@ -732,6 +863,10 @@ You have ZERO state transition authority. Transitions are strictly governed by P
 
       if (!rawText) return;
 
+      // Sprint E: Store the response for explicit artifact production
+      lastAgentResponse = rawText;
+
+      // Try to extract artifact (existing behavior)
       const ingestion = ArtifactIngestionService.ingestFromExecution(
         { invocationId: `run-${Date.now()}`, status: 'COMPLETED', rawOutput: rawText },
         expectedType,
@@ -746,6 +881,30 @@ You have ZERO state transition authority. Transitions are strictly governed by P
       if (ingestion.success && ingestion.artifact) {
         const target = getTargetTransitionForArtifact(currentState, expectedType);
         if (target) {
+          // Sprint A: If transitioning to PLANNING, ensure planning intent is established
+          // Sprint B: If CREATE_SPECIFICATION, transition to SPECIFICATION via T-035
+          if (target === 'PLANNING') {
+            const intent = await ensurePlanningIntent(ctx);
+            if (intent === 'CREATE_SPECIFICATION') {
+              ctx.ui.notify('Planning intent: Create/revise MasterSpecification. Transitioning to Specification authoring (T-035)...', 'info');
+              await controller.transition('SPECIFICATION', { actorType: 'HUMAN', actorId: 'lead-human' });
+              updateFooterStatus(ctx);
+              const specAgent = getActiveAgentEntry(controller.getState());
+              if (specAgent) {
+                ctx.ui.notify(`Transitioned to [SPECIFICATION] | Active: ${AgentRosterService.formatBadge(specAgent)}`, 'info');
+                await promptAgentHandoff(specAgent, controller.getState(), ctx);
+              }
+              return; // Exit agent_end handler; we've transitioned to SPECIFICATION
+            } else if (intent === 'GOVERNED_FEATURE') {
+              const hasMasterSpec = !!artifactStore.getLatestAccepted('MasterSpecification', workflowId);
+              if (!hasMasterSpec) {
+                ctx.ui.notify('Planning intent: Governed feature development. No accepted MasterSpecification exists.', 'warning');
+              }
+            } else {
+              ctx.ui.notify('Planning intent: Surgical change (no governing MasterSpecification).', 'info');
+            }
+          }
+
           const confirmed = await ctx.ui.confirm(
             'HITM Step Authorization',
             `${AgentRosterService.formatBadge(currentAgent)} completed ${expectedType}.\nAuthorize transition from [${currentState}] to [${target}]?`
@@ -754,7 +913,10 @@ You have ZERO state transition authority. Transitions are strictly governed by P
             try {
               await controller.transition(target, { actorType: 'AGENT', actorId: currentAgent.id }, {
                 humanApproved: true,
-                artifactIds: [ingestion.artifact.artifactId]
+                artifactIds: [ingestion.artifact.artifactId],
+                metadata: {
+                  planningIntent: planningIntent
+                }
               });
 
               // Automatic advancement from control states to next work state.
@@ -780,18 +942,21 @@ You have ZERO state transition authority. Transitions are strictly governed by P
         return;
       }
 
-      // CASE B: Conversational response without artifact -> Human-In-The-Middle Confirmation
-      const promptToFormalize = await ctx.ui.confirm(
-        'Artifact Pending',
-        `${AgentRosterService.formatBadge(currentAgent)} responded without a ${expectedType} JSON artifact.\nPrompt ${currentAgent.name} to formalize the discussion into ${expectedType} now?`
+      // CASE B: Conversational response without artifact -> Ask if work is complete
+      const workComplete = await ctx.ui.confirm(
+        'Work Complete?',
+        `${AgentRosterService.formatBadge(currentAgent)} responded without a ${expectedType} JSON artifact.\nIs the work for this step complete, or should ${currentAgent.name} continue?`
       );
 
-      if (promptToFormalize) {
+      if (workComplete) {
+        // Human says work is complete -> prompt agent to produce the artifact
+        ctx.ui.notify('Prompting agent to produce the final artifact...', 'info');
         await dispatchTurnToModel(
-          `Formalize our discussion into the required ${expectedType} JSON artifact code block now matching its schema.`,
+          `The human has confirmed that the work for this step is complete. Now formalize our discussion into the required ${expectedType} JSON artifact code block matching its schema.`,
           ctx
         );
       }
+      // If not workComplete, return to agent for more discussion (natural continuation)
     });
   }
 
@@ -875,6 +1040,23 @@ You have ZERO state transition authority. Transitions are strictly governed by P
         return;
       }
 
+      // Sprint A: If transitioning to PLANNING, ensure planning intent is established
+      // Sprint B: If CREATE_SPECIFICATION, transition to SPECIFICATION via T-035
+      if (target === 'PLANNING') {
+        const intent = await ensurePlanningIntent(ctx);
+        if (intent === 'CREATE_SPECIFICATION') {
+          ctx.ui.notify('Planning intent: Create/revise MasterSpecification. Transitioning to Specification authoring (T-035)...', 'info');
+          await controller.transition('SPECIFICATION', { actorType: 'HUMAN', actorId: 'lead-human' });
+          updateFooterStatus(ctx);
+          const specAgent = getActiveAgentEntry(controller.getState());
+          if (specAgent) {
+            ctx.ui.notify(`Transitioned to [SPECIFICATION] | Active: ${AgentRosterService.formatBadge(specAgent)}`, 'info');
+            await promptAgentHandoff(specAgent, controller.getState(), ctx);
+          }
+          return; // Exit hitm-approve; we've transitioned to SPECIFICATION
+        }
+      }
+
       const confirmed = await ctx.ui.confirm(
         'HITM Transition Authorization',
         `Authorize transition from [${currentState}] to [${target}]?`
@@ -882,7 +1064,12 @@ You have ZERO state transition authority. Transitions are strictly governed by P
 
       if (confirmed) {
         try {
-          await controller.transition(target, { actorType: 'HUMAN', actorId: 'lead-human' }, { humanApproved: true });
+          await controller.transition(target, { actorType: 'HUMAN', actorId: 'lead-human' }, { 
+            humanApproved: true,
+            metadata: {
+              planningIntent: planningIntent
+            }
+          });
 
           // Auto-advance from control states
           while (CONTROL_STATES.has(controller.getState())) {
@@ -901,6 +1088,80 @@ You have ZERO state transition authority. Transitions are strictly governed by P
             }
           } else {
             ctx.ui.notify(`State advanced to [${controller.getState()}] (control state, no active agent)`, 'info');
+          }
+        } catch (err: any) {
+          ctx.ui.notify(`Transition rejected: ${err.message}`, 'error');
+        }
+      }
+    }
+  });
+
+  // Sprint E: Explicit artifact production from last agent response
+  pi.registerCommand('hitm-artifact', {
+    description: 'Produce artifact from last agent response and present HITM gate',
+    handler: async (_args: string, ctx: ExtensionContext) => {
+      const currentState = controller.getState();
+      const currentAgent = getActiveAgentEntry(currentState);
+      const expectedType = getExpectedArtifactForState(currentState);
+
+      if (!expectedType || !currentAgent) {
+        ctx.ui.notify('No expected artifact for current state or no active agent.', 'warning');
+        return;
+      }
+
+      if (!lastAgentResponse) {
+        ctx.ui.notify('No stored agent response to produce artifact from.', 'warning');
+        return;
+      }
+
+      const ingestion = ArtifactIngestionService.ingestFromExecution(
+        { invocationId: `run-${Date.now()}`, status: 'COMPLETED', rawOutput: lastAgentResponse },
+        expectedType,
+        workflowId,
+        `task-${currentState}`,
+        currentAgent.canonicalRole,
+        validator,
+        artifactStore as any
+      );
+
+      if (!ingestion.success || !ingestion.artifact) {
+        ctx.ui.notify('Failed to extract valid artifact from agent response.', 'error');
+        return;
+      }
+
+      const target = getTargetTransitionForArtifact(currentState, expectedType);
+      if (!target) {
+        ctx.ui.notify('No target transition for artifact type.', 'warning');
+        return;
+      }
+
+      const confirmed = await ctx.ui.confirm(
+        'HITM Step Authorization',
+        `${AgentRosterService.formatBadge(currentAgent)} completed ${expectedType}.\nAuthorize transition from [${currentState}] to [${target}]?`
+      );
+
+      if (confirmed) {
+        try {
+          await controller.transition(target, { actorType: 'AGENT', actorId: currentAgent.id }, {
+            humanApproved: true,
+            artifactIds: [ingestion.artifact.artifactId],
+            metadata: {
+              planningIntent: planningIntent
+            }
+          });
+
+          // Automatic advancement from control states
+          while (CONTROL_STATES.has(controller.getState())) {
+            const autoTarget = getTargetTransitionForControlState(controller.getState());
+            if (!autoTarget) break;
+            await controller.transition(autoTarget, { actorType: 'SYSTEM', actorId: '0000' });
+            ctx.ui.notify(`Auto-advanced to [${controller.getState()}]`, 'info');
+          }
+
+          updateFooterStatus(ctx);
+          const nextAgent = getActiveAgentEntry(controller.getState());
+          if (nextAgent && nextAgent.canonicalRole !== currentAgent.canonicalRole) {
+            await promptAgentHandoff(nextAgent, controller.getState(), ctx);
           }
         } catch (err: any) {
           ctx.ui.notify(`Transition rejected: ${err.message}`, 'error');

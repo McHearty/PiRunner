@@ -16,6 +16,7 @@ export interface RepositorySnapshot {
 export interface GuardContext {
   currentState: WorkflowState;
   targetState: WorkflowState;
+  workflowId: string;
   artifacts: {
     get<T = any>(artifactId: string): StoredArtifact<T> | undefined;
     getByType<T = any>(artifactType: string): StoredArtifact<T>[];

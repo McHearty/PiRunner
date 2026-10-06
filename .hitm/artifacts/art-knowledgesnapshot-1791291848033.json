@@ -1,0 +1,122 @@
+{
+  "artifactId": "art-knowledgesnapshot-1791291848033",
+  "artifactType": "KnowledgeSnapshot",
+  "schemaVersion": "1.0.0",
+  "workflowId": "pirunner-1791291743088-raeprq",
+  "taskId": "task-KNOWLEDGE_SYNC",
+  "agentId": "0048",
+  "createdAt": "2026-10-06T13:04:08.034Z",
+  "parentArtifactIds": [],
+  "sourceRefs": [
+    {
+      "type": "SESSION",
+      "identifier": "run-1791291848033"
+    }
+  ],
+  "status": "SUBMITTED",
+  "payload": {
+    "sourceRevision": "a96bda6",
+    "dependencyLockHash": "97c4bab5e9a3bfe277322fbb497191fdb2f7999f8fc68e8ad87aaacef9c77dc5",
+    "verifiedAt": "2026-10-06T13:03:04.000Z",
+    "freshnessPolicyVersion": "1.0.0",
+    "relevantSourceFiles": [
+      {
+        "path": "src/domain/workflow/Guards.ts",
+        "contentHash": "4fc86d009a14b4ac06f3a2e561231e5ffc3ae5c6acf253553928b04bb319dc87",
+        "language": "typescript"
+      },
+      {
+        "path": "src/domain/workflow/WorkflowTransition.ts",
+        "contentHash": "a526e7f6c77c9ff30c564f0dcba209d893546783f200453842dadf13528c2c13",
+        "language": "typescript"
+      },
+      {
+        "path": "src/index.ts",
+        "contentHash": "a78fd7bf28a51caa753d8524181af136dd93e20c245dfba32811ac347e267cbb",
+        "language": "typescript"
+      },
+      {
+        "path": "src/extension.ts",
+        "contentHash": "38c6462bb28e01792c389842bd73ffaccb2f4cb97a992481ab5a71fc086b63b9",
+        "language": "typescript"
+      },
+      {
+        "path": "schemas/sprint-specification.schema.json",
+        "contentHash": "25d559400931bf46fce2fb58909202fb9e4aea6c7312e008ad5bda77966106a2",
+        "language": "json"
+      },
+      {
+        "path": "tests/application/AdoptionWithoutMasterSpec.test.ts",
+        "contentHash": "0846efe0d7a19de06878f7b490c45af00522696e512531080d3b6b3157e3239b",
+        "language": "typescript"
+      },
+      {
+        "path": "workflow.json",
+        "contentHash": "766f681eecb1debec1a37f6a03c1aafccea030b1f9b9abc85655470561126374",
+        "language": "json"
+      }
+    ],
+    "relevantSymbols": [
+      {
+        "name": "hitmExtension",
+        "kind": "function",
+        "location": {
+          "path": "src/extension.ts",
+          "line": 1,
+          "column": 0
+        },
+        "exported": true
+      }
+    ],
+    "dependencies": [
+      {
+        "name": "ajv",
+        "version": "^8.17.1",
+        "resolved": "8.17.1",
+        "ecosystem": "npm",
+        "manifestPath": "package.json"
+      },
+      {
+        "name": "ajv-formats",
+        "version": "^3.0.1",
+        "resolved": "3.0.1",
+        "ecosystem": "npm",
+        "manifestPath": "package.json"
+      },
+      {
+        "name": "typescript",
+        "version": "^5.5.0",
+        "resolved": "5.5.4",
+        "ecosystem": "npm",
+        "manifestPath": "package.json"
+      },
+      {
+        "name": "vitest",
+        "version": "^2.0.0",
+        "resolved": "2.0.5",
+        "ecosystem": "npm",
+        "manifestPath": "package.json"
+      },
+      {
+        "name": "@types/node",
+        "version": "^20.14.0",
+        "resolved": "20.14.10",
+        "ecosystem": "npm",
+        "manifestPath": "package.json"
+      }
+    ],
+    "documentationRefs": [
+      {
+        "identifier": "TECHSPEC.md",
+        "title": "PiRunner Technical Specification",
+        "retrievedAt": "2026-10-06T13:03:04.000Z"
+      },
+      {
+        "identifier": "README.md",
+        "title": "PiRunner Readme",
+        "retrievedAt": "2026-10-06T13:03:04.000Z"
+      }
+    ],
+    "notes": "Incremental knowledge delta synchronized. Source at HEAD a96bda6 (S9-P0-3: surgical change path for adoption without MasterSpecification). Working tree changes: workflow.json created, .hitm artifact cleanup (obsolete baseline and knowledge artifacts deleted), new baseline-1791291752604.json added. Last commit modified Guards.ts, WorkflowTransition.ts, sprint-specification schema, and added AdoptionWithoutMasterSpec.test.ts."
+  }
+}

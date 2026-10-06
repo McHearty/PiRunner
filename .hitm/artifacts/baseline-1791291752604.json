@@ -1,0 +1,110 @@
+{
+  "artifactId": "baseline-1791291752604",
+  "artifactType": "ProjectBaseline",
+  "schemaVersion": "1.0.0",
+  "workflowId": "pirunner-1791291743088-raeprq",
+  "taskId": "intake",
+  "agentId": "0000",
+  "createdAt": "2026-10-06T13:02:32.604Z",
+  "parentArtifactIds": [],
+  "sourceRefs": [
+    {
+      "type": "GIT",
+      "identifier": "a96bda60d9d9b46e107a242db627c449888c3196"
+    }
+  ],
+  "status": "ACCEPTED",
+  "payload": {
+    "repositoryIdentity": "hitm-workflow",
+    "baseRevision": "a96bda60d9d9b46e107a242db627c449888c3196",
+    "branch": "main",
+    "workingTreeState": "DIRTY",
+    "projectType": "typescript",
+    "buildSystem": "npm",
+    "specificationRefs": [
+      {
+        "type": "DOCUMENTATION",
+        "identifier": "TECHSPEC.md"
+      }
+    ],
+    "testRefs": [
+      {
+        "type": "FILE",
+        "identifier": "tests"
+      }
+    ],
+    "documentationRefs": [
+      {
+        "type": "FILE",
+        "identifier": "README.md"
+      }
+    ],
+    "dependencyLockHash": "97c4bab5e9a3bfe277322fbb497191fdb2f7999f8fc68e8ad87aaacef9c77dc5",
+    "sourceInventory": [
+      {
+        "type": "FILE",
+        "identifier": "src"
+      }
+    ],
+    "testInventory": [
+      {
+        "type": "FILE",
+        "identifier": "tests"
+      }
+    ],
+    "existingCiConfiguration": [],
+    "detectedUncommittedChanges": [
+      "hitm/artifacts/art-know-1791194311969.json",
+      ".hitm/artifacts/art-know-1791194859345.json",
+      ".hitm/artifacts/art-know-1791195525411.json",
+      ".hitm/artifacts/art-know-1791200297149.json",
+      ".hitm/artifacts/art-knowledgesnapshot-1791198127292.json",
+      ".hitm/artifacts/art-knowledgesnapshot-1791205812119.json",
+      ".hitm/artifacts/art-knowledgesnapshot-1791206726807.json",
+      ".hitm/artifacts/art-knowledgesnapshot-1791215294081.json",
+      ".hitm/artifacts/art-knowledgesnapshot-1791279049173.json",
+      ".hitm/artifacts/art-knowledgesnapshot-1791280465617.json",
+      ".hitm/artifacts/art-sprintspecification-1791200527382.json",
+      ".hitm/artifacts/art-sprintspecification-1791214821886.json",
+      ".hitm/artifacts/art-sprintspecification-1791215372413.json",
+      ".hitm/artifacts/art-sprintspecification-1791215429433.json",
+      ".hitm/artifacts/art-sprintspecification-1791215472333.json",
+      ".hitm/artifacts/art-sprintspecification-1791279120556.json",
+      ".hitm/artifacts/art-sprintspecification-1791279203190.json",
+      ".hitm/artifacts/art-sprintspecification-1791280773133.json",
+      ".hitm/artifacts/art-test-spec-canonical.json",
+      ".hitm/artifacts/baseline-1791144874449.json",
+      ".hitm/artifacts/baseline-1791194311901.json",
+      ".hitm/artifacts/baseline-1791194859291.json",
+      ".hitm/artifacts/baseline-1791195525352.json",
+      ".hitm/artifacts/baseline-1791196681840.json",
+      ".hitm/artifacts/baseline-1791198512999.json",
+      ".hitm/artifacts/baseline-1791203081667.json",
+      ".hitm/artifacts/baseline-1791205043162.json",
+      ".hitm/artifacts/baseline-1791206431286.json",
+      ".hitm/artifacts/baseline-1791214956353.json",
+      ".hitm/artifacts/baseline-1791273387085.json",
+      ".hitm/artifacts/baseline-1791277473969.json",
+      ".hitm/artifacts/baseline-1791277589616.json",
+      ".hitm/artifacts/baseline-1791278785083.json",
+      ".hitm/artifacts/baseline-1791280298706.json",
+      ".hitm/artifacts/daily-devlog-2026-10-05.json",
+      ".hitm/artifacts/daily-plan-pirunner-re-audit.json",
+      ".hitm/artifacts/knowledge-snapshot-pre-planning.json",
+      ".hitm/artifacts/knowledge-snapshot-symbol-graph.json",
+      ".hitm/artifacts/sprint-specification-pirunner-re-audit.json",
+      ".hitm/artifacts/test-specification-pirunner-re-audit.json",
+      ".hitm/events.jsonl",
+      ".hitm/hermetic-test-auth/test-suite.lock.json",
+      ".hitm/knowledge/knowledge-snapshot.json",
+      ".hitm/knowledge/snapshot-latest.json",
+      ".hitm/knowledge/snapshot.json",
+      ".hitm/test-suite.lock.json",
+      ".hitm/tmp/rejected-artifact.json",
+      "workflow.json"
+    ],
+    "unresolvedProjectQuestions": [],
+    "intakeTimestamp": "2026-10-06T13:02:32.604Z",
+    "repositorySnapshotHash": "00fa83832b6aee0bbc4bc7a497fc70b9da9268768e4de7d12cd061aa247b8df8"
+  }
+}
