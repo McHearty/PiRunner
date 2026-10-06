@@ -65,12 +65,6 @@ export class ProjectIntakeService {
     const specificationRefs: any[] = [];
     if (existsSync(join(workspaceRoot, 'TECHSPEC.md'))) specificationRefs.push({ type: 'DOCUMENTATION', identifier: 'TECHSPEC.md' });
     if (existsSync(join(workspaceRoot, 'SPEC.md'))) specificationRefs.push({ type: 'DOCUMENTATION', identifier: 'SPEC.md' });
-    if (existsSync(join(workspaceRoot, 'CONTRIBUTING.md'))) specificationRefs.push({ type: 'DOCUMENTATION', identifier: 'CONTRIBUTING.md' });
-    // Amendment files (track spec changes)
-    if (existsSync(join(workspaceRoot, 'AMEND.md'))) specificationRefs.push({ type: 'DOCUMENTATION', identifier: 'AMEND.md' });
-    if (existsSync(join(workspaceRoot, 'AMENDMENT.md'))) specificationRefs.push({ type: 'DOCUMENTATION', identifier: 'AMENDMENT.md' });
-    const amendmentsDir = join(workspaceRoot, 'amendments');
-    if (existsSync(amendmentsDir)) specificationRefs.push({ type: 'DIRECTORY', identifier: 'amendments' });
 
     const testRefs: any[] = [];
     if (existsSync(join(workspaceRoot, 'tests'))) testRefs.push({ type: 'FILE', identifier: 'tests' });

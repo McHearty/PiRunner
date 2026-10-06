@@ -130,7 +130,6 @@ describe('Test Execution Authority Guards (Sprint 4)', () => {
     return {
       currentState: 'COMMIT_CREATED' as any,
       targetState: 'REVIEW' as any,
-      workflowId: 'wf-test-auth',
       artifacts: artifacts || {
         get: (id: string) => artifactStore.get(id),
         getByType: (type: string) => artifactStore.getByType(type),

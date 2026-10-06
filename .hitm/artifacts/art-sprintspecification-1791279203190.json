@@ -1,0 +1,149 @@
+{
+  "artifactId": "art-sprintspecification-1791279203190",
+  "artifactType": "SprintSpecification",
+  "schemaVersion": "1.0.0",
+  "workflowId": "pirunner-canonical",
+  "taskId": "task-PLANNING",
+  "agentId": "0036",
+  "createdAt": "2026-10-06T09:33:23.190Z",
+  "parentArtifactIds": [],
+  "sourceRefs": [
+    {
+      "type": "SESSION",
+      "identifier": "run-1791279203190"
+    }
+  ],
+  "status": "SUBMITTED",
+  "payload": {
+    "masterSpecificationArtifactId": "art-spec",
+    "sprintNumber": 1,
+    "goals": [
+      "Verify end-to-end artifact acceptance and test suite lock integrity chain (Q1-Q4)",
+      "Verify execution fidelity and provenance tracking in TestExecutionResult (Q5-Q6)",
+      "Verify real Pi agent artifact ingestion and tool authorization enforcement (Q7-Q8)",
+      "Verify state recovery, conflict detection, and audit trail immutability (Q9-Q11)",
+      "Produce documented evidence for all 11 verification questions"
+    ],
+    "tasks": [
+      {
+        "id": "TASK-1",
+        "title": "Q1: Create/accept TestSpecification describing current test suite via workflow",
+        "requirementIds": [
+          "REQ-001"
+        ]
+      },
+      {
+        "id": "TASK-2",
+        "title": "Q2: Verify accepted TestSpecification contains testSuiteContentHash field",
+        "requirementIds": [
+          "REQ-002"
+        ]
+      },
+      {
+        "id": "TASK-3",
+        "title": "Q3: Verify TestSuiteLock references the exact accepted artifact",
+        "requirementIds": [
+          "REQ-003"
+        ]
+      },
+      {
+        "id": "TASK-4",
+        "title": "Q4: Verify live test suite hash equals the locked hash",
+        "requirementIds": [
+          "REQ-004"
+        ]
+      },
+      {
+        "id": "TASK-5",
+        "title": "Q5: Execute /hitm-test and verify it runs the command from TestSpecification",
+        "requirementIds": [
+          "REQ-005"
+        ]
+      },
+      {
+        "id": "TASK-6",
+        "title": "Q6: Inspect TestExecutionResult for exact spec artifact, hash, command, and revision",
+        "requirementIds": [
+          "REQ-006"
+        ]
+      },
+      {
+        "id": "TASK-7",
+        "title": "Q7: Verify real Pi agent can emit artifact and have it ingested without synthetic provenance",
+        "requirementIds": [
+          "REQ-007"
+        ]
+      },
+      {
+        "id": "TASK-8",
+        "title": "Q8: Attempt unauthorized real Pi tool call and verify it is blocked",
+        "requirementIds": [
+          "REQ-008"
+        ]
+      },
+      {
+        "id": "TASK-9",
+        "title": "Q9: Restart workflow and verify recovery to same canonical state",
+        "requirementIds": [
+          "REQ-009"
+        ]
+      },
+      {
+        "id": "TASK-10",
+        "title": "Q10: Mutate repository deliberately and verify expected conflict/HUMAN_GATE behavior",
+        "requirementIds": [
+          "REQ-010"
+        ]
+      },
+      {
+        "id": "TASK-11",
+        "title": "Q11: Verify PRESERVE appends evidence without modifying historical events",
+        "requirementIds": [
+          "REQ-011"
+        ]
+      }
+    ],
+    "acceptanceCriteria": [
+      {
+        "id": "AC-001",
+        "statement": "TestSpecification is successfully created and accepted through the workflow with testSuiteContentHash present"
+      },
+      {
+        "id": "AC-002",
+        "statement": "TestSuiteLock references the exact artifact ID from the accepted TestSpecification"
+      },
+      {
+        "id": "AC-003",
+        "statement": "Live hash computation matches the locked hash exactly"
+      },
+      {
+        "id": "AC-004",
+        "statement": "Test execution runs the command specified in TestSpecification and result contains all provenance fields (spec artifact ID, hash, command, revision)"
+      },
+      {
+        "id": "AC-005",
+        "statement": "Real Pi agent successfully emits artifact without synthetic provenance and it is ingested correctly"
+      },
+      {
+        "id": "AC-006",
+        "statement": "Unauthorized real Pi tool call is detected and blocked with appropriate error"
+      },
+      {
+        "id": "AC-007",
+        "statement": "Workflow restart recovers to the same canonical state as before restart"
+      },
+      {
+        "id": "AC-008",
+        "statement": "Deliberate repository mutation triggers expected conflict detection and HUMAN_GATE behavior"
+      },
+      {
+        "id": "AC-009",
+        "statement": "PRESERVE conflict resolution appends new evidence without modifying any historical events"
+      },
+      {
+        "id": "AC-010",
+        "statement": "All 11 verification questions are answered with documented evidence in test results or workflow logs"
+      }
+    ]
+  }
+}

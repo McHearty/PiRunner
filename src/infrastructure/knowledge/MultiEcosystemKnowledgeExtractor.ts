@@ -300,7 +300,7 @@ export class MultiEcosystemKnowledgeExtractor {
 
   public static extractDocumentationRefs(workspaceRoot: string): DocumentationRef[] {
     const docs: DocumentationRef[] = [];
-    const knownDocs = ['README.md', 'TECHSPEC.md', 'SPEC.md', 'CONTRIBUTING.md', 'AMEND.md', 'AMENDMENT.md'];
+    const knownDocs = ['README.md', 'TECHSPEC.md', 'SPEC.md'];
     for (const d of knownDocs) {
       const p = join(workspaceRoot, d);
       if (existsSync(p)) {

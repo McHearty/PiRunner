@@ -1,0 +1,115 @@
+{
+  "artifactId": "baseline-1791203081667",
+  "artifactType": "ProjectBaseline",
+  "schemaVersion": "1.0.0",
+  "workflowId": "pirunner-canonical",
+  "taskId": "intake",
+  "agentId": "0000",
+  "createdAt": "2026-10-05T12:24:41.667Z",
+  "parentArtifactIds": [],
+  "sourceRefs": [
+    {
+      "type": "GIT",
+      "identifier": "293ef0f192440525840f6d686b2c3e56cd96bba9"
+    }
+  ],
+  "status": "ACCEPTED",
+  "payload": {
+    "repositoryIdentity": "hitm-workflow",
+    "baseRevision": "293ef0f192440525840f6d686b2c3e56cd96bba9",
+    "branch": "main",
+    "workingTreeState": "DIRTY",
+    "projectType": "typescript",
+    "buildSystem": "npm",
+    "specificationRefs": [
+      {
+        "type": "DOCUMENTATION",
+        "identifier": "TECHSPEC.md"
+      }
+    ],
+    "testRefs": [
+      {
+        "type": "FILE",
+        "identifier": "tests"
+      }
+    ],
+    "documentationRefs": [
+      {
+        "type": "FILE",
+        "identifier": "README.md"
+      }
+    ],
+    "dependencyLockHash": "97c4bab5e9a3bfe277322fbb497191fdb2f7999f8fc68e8ad87aaacef9c77dc5",
+    "sourceInventory": [
+      {
+        "type": "FILE",
+        "identifier": "src"
+      }
+    ],
+    "testInventory": [
+      {
+        "type": "FILE",
+        "identifier": "tests"
+      }
+    ],
+    "existingCiConfiguration": [],
+    "detectedUncommittedChanges": [
+      "ECHSPEC.md",
+      "skills/01-concept-package.md",
+      "skills/02-master-specification.md",
+      "skills/03-sprint-planning.md",
+      "skills/04-knowledge-sync.md",
+      "skills/05-author-acceptance-tests.md",
+      "skills/06-implement-feature.md",
+      "skills/07-triage-failure.md",
+      "skills/08-review-implementation.md",
+      "skills/09-record-devlog.md",
+      "skills/10-curate-skill.md",
+      "skills/11-prepare-publication.md",
+      "skills/author-tests.md",
+      "skills/curate-skill.md",
+      "skills/implement-feature.md",
+      "src/agents/AgentPrompts.ts",
+      "src/agents/GovernancePrompt.ts",
+      "src/application/WorkflowController.ts",
+      "src/domain/artifacts/ArtifactIngestion.ts",
+      "src/domain/project/StateValidation.ts",
+      "src/domain/repository/PathCapability.ts",
+      "src/domain/workflow/WorkflowTransition.ts",
+      "src/extension.ts",
+      "src/index.ts",
+      "src/infrastructure/events/FileEventStore.ts",
+      "src/infrastructure/knowledge/GitKnowledgeProvider.ts",
+      "src/infrastructure/pi/PiAgentRunner.ts",
+      "src/infrastructure/testing/RealDeterministicTestRunner.ts",
+      "src/types/pi.d.ts",
+      "tests/domain/artifacts/ArtifactIngestion.test.ts",
+      "tests/domain/workflow/WorkflowStateMachine.test.ts",
+      "tests/infrastructure/extension/HarnessAndPrompts.test.ts",
+      "tests/infrastructure/pi/PiAgentRunner.test.ts",
+      ".hitm/agent-roster.json",
+      ".hitm/artifacts/",
+      ".hitm/events.jsonl",
+      ".hitm/knowledge/",
+      "skills/concept-development.md",
+      "skills/devlog-recording.md",
+      "skills/implementation.md",
+      "skills/knowledge-synchronization.md",
+      "skills/publication-preparation.md",
+      "skills/review-verification.md",
+      "skills/skill-curation.md",
+      "skills/specification-authoring.md",
+      "skills/sprint-planning.md",
+      "skills/test-authoring.md",
+      "skills/triage-diagnosis.md",
+      "src/domain/agents/AgentTaskCatalog.ts",
+      "src/domain/artifacts/ArtifactSkeletons.ts",
+      "src/infrastructure/knowledge/MultiEcosystemKnowledgeExtractor.ts",
+      "tests/domain/agents/",
+      "tests/domain/testing/TestSpecificationAuthority.test.ts"
+    ],
+    "unresolvedProjectQuestions": [],
+    "intakeTimestamp": "2026-10-05T12:24:41.667Z",
+    "repositorySnapshotHash": "0d6d4c75b942d6d3e7617fc8b7930d28892b561ee29a475581e6cafede2f525c"
+  }
+}

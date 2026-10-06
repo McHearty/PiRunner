@@ -1,0 +1,62 @@
+{
+  "artifactId": "art-sprintspecification-1791214821886",
+  "artifactType": "SprintSpecification",
+  "schemaVersion": "1.0.0",
+  "workflowId": "pirunner-canonical",
+  "taskId": "task-PLANNING",
+  "agentId": "0036",
+  "createdAt": "2026-10-05T15:40:21.886Z",
+  "parentArtifactIds": [],
+  "sourceRefs": [
+    {
+      "type": "SESSION",
+      "identifier": "run-1791214821886"
+    }
+  ],
+  "status": "SUBMITTED",
+  "payload": {
+    "masterSpecificationArtifactId": "art-spec",
+    "sprintNumber": 1,
+    "goals": [
+      "Update project documentation (README.md and USAGE.md) with current information",
+      "Generate a descriptive commit for all uncommitted work"
+    ],
+    "tasks": [
+      {
+        "id": "TASK-1",
+        "title": "Review and update README.md content",
+        "requirementIds": [
+          "REQ-DOC-READ"
+        ]
+      },
+      {
+        "id": "TASK-2",
+        "title": "Review and update USAGE.md with accurate usage documentation",
+        "requirementIds": [
+          "REQ-DOC-USAGE"
+        ]
+      },
+      {
+        "id": "TASK-3",
+        "title": "Generate a commit with appropriate message for all uncommitted changes",
+        "requirementIds": [
+          "REQ-COMMIT"
+        ]
+      }
+    ],
+    "acceptanceCriteria": [
+      {
+        "id": "AC-001",
+        "statement": "README.md has been updated and reflects current project state"
+      },
+      {
+        "id": "AC-002",
+        "statement": "USAGE.md has been updated with accurate and complete usage information"
+      },
+      {
+        "id": "AC-003",
+        "statement": "A commit has been created with a descriptive message capturing all changes"
+      }
+    ]
+  }
+}

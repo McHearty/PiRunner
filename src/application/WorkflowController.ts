@@ -124,10 +124,9 @@ export class WorkflowController {
     const guardContext: GuardContext = {
       currentState: this.currentState,
       targetState,
-      workflowId: this.workflowId,
       artifacts: {
         get: (id) => this.artifactStore.get(id),
-        getByType: (type) => this.artifactStore.getByType(type).filter(a => a.workflowId === this.workflowId),
+        getByType: (type) => this.artifactStore.getByType(type),
         getLatestAccepted: (type) => this.artifactStore.getLatestAccepted(type, this.workflowId)
       },
       eventHistory: this.eventStore.getEvents(this.workflowId),

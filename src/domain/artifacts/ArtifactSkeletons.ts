@@ -40,7 +40,6 @@ export const ARTIFACT_SKELETONS: Record<string, string> = {
   SprintSpecification: `\`\`\`json
 {
   "masterSpecificationArtifactId": "art-spec",
-  "surgicalChange": false,
   "sprintNumber": 1,
   "goals": ["Implement requested feature"],
   "tasks": [

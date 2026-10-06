@@ -1,0 +1,72 @@
+{
+  "artifactId": "baseline-1791280298706",
+  "artifactType": "ProjectBaseline",
+  "schemaVersion": "1.0.0",
+  "workflowId": "pirunner-canonical",
+  "taskId": "intake",
+  "agentId": "0000",
+  "createdAt": "2026-10-06T09:51:38.706Z",
+  "parentArtifactIds": [],
+  "sourceRefs": [
+    {
+      "type": "GIT",
+      "identifier": "6ec253f358ad42480e880d2286f0a7091c6f2d27"
+    }
+  ],
+  "status": "ACCEPTED",
+  "payload": {
+    "repositoryIdentity": "hitm-workflow",
+    "baseRevision": "6ec253f358ad42480e880d2286f0a7091c6f2d27",
+    "branch": "main",
+    "workingTreeState": "DIRTY",
+    "projectType": "typescript",
+    "buildSystem": "npm",
+    "specificationRefs": [
+      {
+        "type": "DOCUMENTATION",
+        "identifier": "TECHSPEC.md"
+      }
+    ],
+    "testRefs": [
+      {
+        "type": "FILE",
+        "identifier": "tests"
+      }
+    ],
+    "documentationRefs": [
+      {
+        "type": "FILE",
+        "identifier": "README.md"
+      }
+    ],
+    "dependencyLockHash": "97c4bab5e9a3bfe277322fbb497191fdb2f7999f8fc68e8ad87aaacef9c77dc5",
+    "sourceInventory": [
+      {
+        "type": "FILE",
+        "identifier": "src"
+      }
+    ],
+    "testInventory": [
+      {
+        "type": "FILE",
+        "identifier": "tests"
+      }
+    ],
+    "existingCiConfiguration": [],
+    "detectedUncommittedChanges": [
+      "hitm/events.jsonl",
+      ".hitm/hermetic-test-auth/test-suite.lock.json",
+      ".hitm/artifacts/art-knowledgesnapshot-1791279049173.json",
+      ".hitm/artifacts/art-sprintspecification-1791279120556.json",
+      ".hitm/artifacts/art-sprintspecification-1791279203190.json",
+      ".hitm/artifacts/baseline-1791273387085.json",
+      ".hitm/artifacts/baseline-1791277473969.json",
+      ".hitm/artifacts/baseline-1791277589616.json",
+      ".hitm/artifacts/baseline-1791278785083.json",
+      ".hitm/knowledge/snapshot-latest.json"
+    ],
+    "unresolvedProjectQuestions": [],
+    "intakeTimestamp": "2026-10-06T09:51:38.706Z",
+    "repositorySnapshotHash": "e60ed7d7f7da20f78a2b26d629ede20f4a50b599b2b2c9f80319a129e790b9a8"
+  }
+}

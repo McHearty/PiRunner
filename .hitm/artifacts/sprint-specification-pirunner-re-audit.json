@@ -1,0 +1,280 @@
+{
+  "artifactId": "art-sprint-spec-pirunner-re-audit",
+  "artifactType": "SprintSpecification",
+  "schemaVersion": "1.0.0",
+  "workflowId": "pirunner-canonical",
+  "taskId": "plan-sprint",
+  "agentId": "2103",
+  "createdAt": "2026-10-04T23:58:00.000Z",
+  "parentArtifactIds": [
+    "baseline-1791144874449",
+    "art-knowledge-snapshot-pre-planning"
+  ],
+  "status": "ACCEPTED",
+  "payload": {
+    "sprintId": "PIRUNNER-V1.3.0-RE-AUDIT",
+    "sprintGoal": "Complete normative specification synchronization and test authority generalization to achieve full TECHSPEC compliance and production dogfooding readiness.",
+    "targetCompletionDate": "2026-10-05T23:59:59.000Z",
+    "estimatedEffort": {
+      "days": 1,
+      "confidence": "HIGH"
+    },
+    "preconditions": [
+      "Repository working tree is clean at HEAD 293ef0f192440525840f6d686b2c3e56cd96bba9",
+      "All 53 tests passing across 15 test files",
+      "Dependency lockfile unchanged from baseline"
+    ],
+    "sprintScope": {
+      "include": [
+        "TECHSPEC v1.3.0 amendment for Skill Architect subsystem",
+        "TestSpecification authority generalization (framework/command/roots/hash)",
+        "Guard count reconciliation (83 claimed vs 86 implemented)",
+        "Dogfooding run through native conversational path"
+      ],
+      "exclude": [
+        "Architectural redesign",
+        "New feature development",
+        "Refactoring of control plane",
+        "CI/CD pipeline setup"
+      ]
+    },
+    "tasks": [
+      {
+        "taskId": "T1",
+        "title": "Audit TECHSPEC Drift — Skill Architect Subsystem",
+        "description": "Identify all TECHSPEC sections requiring amendment to incorporate agent 0132, SKILL_ARCHITECT role, SKILL_SYNTHESIS workflow state, SkillPackage schema, and skill files.",
+        "dependencies": [],
+        "estimatedDuration": "30min",
+        "deliverables": [
+          "List of TECHSPEC sections requiring updates"
+        ],
+        "acceptanceCriteria": [
+          "Complete inventory of normative gaps between TECHSPEC v1.3.0 and implementation"
+        ]
+      },
+      {
+        "taskId": "T2",
+        "title": "Amend TECHSPEC v1.3.0 — Agent Roster",
+        "description": "Update agent count from 10 to 11. Add agent 0132 (Inventive Weaver, SKILL_ARCHITECT) to agent roster table and description. Update all references to agent count.",
+        "dependencies": ["T1"],
+        "estimatedDuration": "1h",
+        "deliverables": [
+          "Updated TECHSPEC.md with 11-agent roster"
+        ],
+        "acceptanceCriteria": [
+          "TECHSPEC states 11 specialized agents",
+          "Agent 0132 documented with role description",
+          "SKILL_ARCHITECT canonical role documented"
+        ]
+      },
+      {
+        "taskId": "T3",
+        "title": "Amend TECHSPEC v1.3.0 — Workflow State",
+        "description": "Add SKILL_SYNTHESIS workflow state to state machine documentation. Document transition rules into and out of SKILL_SYNTHESIS state.",
+        "dependencies": ["T1"],
+        "estimatedDuration": "45min",
+        "deliverables": [
+          "Updated state machine documentation"
+        ],
+        "acceptanceCriteria": [
+          "SKILL_SYNTHESIS documented in workflow state enum",
+          "Transition rules for skill synthesis documented"
+        ]
+      },
+      {
+        "taskId": "T4",
+        "title": "Amend TECHSPEC v1.3.0 — Skill Architecture",
+        "description": "Document SkillPackage schema, skill synthesis workflow, anti-proliferation guard (>=3 uses), skill capability boundary (skills/**, .pi/skills/**), and bundled role skills.",
+        "dependencies": ["T1", "T2", "T3"],
+        "estimatedDuration": "2h",
+        "deliverables": [
+          "TECHSPEC section on Skill Architecture"
+        ],
+        "acceptanceCriteria": [
+          "SkillPackage schema documented",
+          "Skill synthesis process documented",
+          "Anti-proliferation rules documented",
+          "Skill file locations documented"
+        ]
+      },
+      {
+        "taskId": "T5",
+        "title": "Amend TECHSPEC v1.3.0 — Natural Pi Integration",
+        "description": "Document native Pi integration via before_agent_start and turn_end hooks as primary workflow mechanism (replacing /hitm-run command-only approach).",
+        "dependencies": ["T1"],
+        "estimatedDuration": "1h",
+        "deliverables": [
+          "Updated TECHSPEC documenting natural integration"
+        ],
+        "acceptanceCriteria": [
+          "before_agent_start hook documented",
+          "turn_end hook documented",
+          "Conversational integration described as primary mechanism"
+        ]
+      },
+      {
+        "taskId": "T6",
+        "title": "Reconcile Guard Count Claim",
+        "description": "Verify the actual guard count in Guards.ts. If 86 is correct, update TECHSPEC claim from 83 to 86. Document any discrepancy.",
+        "dependencies": [],
+        "estimatedDuration": "30min",
+        "deliverables": [
+          "Verified guard count"
+        ],
+        "acceptanceCriteria": [
+          "TECHSPEC guard count matches implementation",
+          "Discrepancy documented if any"
+        ]
+      },
+      {
+        "taskId": "T7",
+        "title": "Analyze TestSpecification Authority Defect",
+        "description": "Review current TestSpecification payload structure and identify all locations where testFramework and executionCommand are hardcoded or externally supplied instead of sourced from accepted TestSpecification.",
+        "dependencies": [],
+        "estimatedDuration": "1h",
+        "deliverables": [
+          "Analysis of authority defect"
+        ],
+        "acceptanceCriteria": [
+          "Complete inventory of hardcoded framework/command references",
+          "Root cause identified"
+        ]
+      },
+      {
+        "taskId": "T8",
+        "title": "Fix TestSpecification Authority — StateValidation",
+        "description": "Update src/domain/project/StateValidation.ts to source testFramework and executionCommand from accepted TestSpecification payload rather than hardcoding 'vitest' and 'npm test'.",
+        "dependencies": ["T7"],
+        "estimatedDuration": "1h",
+        "deliverables": [
+          "Updated StateValidation.ts"
+        ],
+        "acceptanceCriteria": [
+          "testFramework sourced from TestSpecification",
+          "executionCommand sourced from TestSpecification",
+          "All tests still passing"
+        ]
+      },
+      {
+        "taskId": "T9",
+        "title": "Fix TestSpecification Authority — RealDeterministicTestRunner",
+        "description": "Update src/infrastructure/testing/RealDeterministicTestRunner.ts to use executionCommand and testFramework from accepted TestSpecification rather than request parameters or hardcoded values.",
+        "dependencies": ["T7"],
+        "estimatedDuration": "1h",
+        "deliverables": [
+          "Updated RealDeterministicTestRunner.ts"
+        ],
+        "acceptanceCriteria": [
+          "testFramework sourced from TestSpecification",
+          "executionCommand sourced from TestSpecification",
+          "All tests still passing"
+        ]
+      },
+      {
+        "taskId": "T10",
+        "title": "Fix TestSpecification Authority — TestSuiteHasher",
+        "description": "Update src/domain/testing/TestSuiteHasher.ts to ensure canonicalization uses authoritative TestSpecification values for framework and command.",
+        "dependencies": ["T7"],
+        "estimatedDuration": "45min",
+        "deliverables": [
+          "Updated TestSuiteHasher.ts"
+        ],
+        "acceptanceCriteria": [
+          "Canonicalization uses TestSpecification values",
+          "Hash consistency maintained for existing test suite"
+        ]
+      },
+      {
+        "taskId": "T11",
+        "title": "Update Test Specification Artifacts",
+        "description": "Update existing TestSpecification artifacts and test suite lock to use the corrected authority model with framework and command fields.",
+        "dependencies": ["T8", "T9", "T10"],
+        "estimatedDuration": "45min",
+        "deliverables": [
+          "Updated test specification artifacts"
+        ],
+        "acceptanceCriteria": [
+          "TestSuiteLock includes framework and command",
+          "Resume validation works with new model"
+        ]
+      },
+      {
+        "taskId": "T12",
+        "title": "Run Full Test Suite — Regression Validation",
+        "description": "Execute complete test suite to verify no regressions from TestSpecification authority changes. Validate all 53 tests pass.",
+        "dependencies": ["T11"],
+        "estimatedDuration": "15min",
+        "deliverables": [
+          "Test suite results"
+        ],
+        "acceptanceCriteria": [
+          "53/53 tests passing",
+          "No new failures"
+        ]
+      },
+      {
+        "taskId": "T13",
+        "title": "Commit TECHSPEC Amendments and Test Authority Fix",
+        "description": "Commit all TECHSPEC amendments and TestSpecification authority changes with appropriate commit messages.",
+        "dependencies": ["T4", "T5", "T6", "T12"],
+        "estimatedDuration": "15min",
+        "deliverables": [
+          "Git commit with all changes"
+        ],
+        "acceptanceCriteria": [
+          "All changes committed",
+          "Working tree clean"
+        ]
+      },
+      {
+        "taskId": "T14",
+        "title": "Dogfooding Run — Native Conversational Path",
+        "description": "Perform one complete PiRunner-on-PiRunner dogfooding run through the native Pi conversational integration path (before_agent_start → execution → turn_end → artifact ingestion → transition).",
+        "dependencies": ["T13"],
+        "estimatedDuration": "2h",
+        "deliverables": [
+          "Dogfooding run results",
+          "Artifact store populated with dogfooding artifacts"
+        ],
+        "acceptanceCriteria": [
+          "Successful end-to-end workflow execution",
+          "Artifacts properly validated and ingested",
+          "Transitions deterministic and correct"
+        ]
+      }
+    ],
+    "riskAssessment": {
+      "risks": [
+        {
+          "risk": "TestSpecification authority changes break resume validation",
+          "likelihood": "MEDIUM",
+          "impact": "HIGH",
+          "mitigation": "Maintain hash consistency; validate with existing test suite lock before and after changes"
+        },
+        {
+          "risk": "TECHSPEC amendments introduce normative conflicts",
+          "likelihood": "LOW",
+          "impact": "MEDIUM",
+          "mitigation": "Cross-reference all amendments against implementation behavior"
+        },
+        {
+          "risk": "Dogfooding run uncovers remaining authority defects",
+          "likelihood": "MEDIUM",
+          "impact": "MEDIUM",
+          "mitigation": "Document findings as follow-up work items; do not block sprint completion"
+        }
+      ]
+    },
+    "definitionOfDone": [
+      "TECHSPEC v1.3.0 amended to document 11 agents including Skill Architect",
+      "SKILL_SYNTHESIS workflow state documented",
+      "Skill Architecture subsystem documented (schema, workflow, anti-proliferation)",
+      "Natural Pi integration documented as primary mechanism",
+      "Guard count claim reconciled with implementation",
+      "TestSpecification authoritative for framework, executionCommand, roots, and hash",
+      "All 53 tests passing after changes",
+      "One successful dogfooding run through native conversational path",
+      "Repository working tree clean"
+    ]
+  }
+}

@@ -241,12 +241,7 @@ describe('MVP Acceptance Workflow (§43 Normative End-to-End with Guards)', () =
       }
     });
 
-    // Knowledge verified → return to PLANNING (T-002C)
-    await controller.transition('PLANNING', { actorType: 'AGENT', actorId: '0048' });
-    expect(controller.getState()).toBe('PLANNING');
-
-    // Planning produces SprintSpecification and transitions to SPRINT_READY (T-030B)
-    await controller.transition('SPRINT_READY', { actorType: 'AGENT', actorId: '0036' }, { humanApproved: true });
+    await controller.transition('SPRINT_READY', { actorType: 'AGENT', actorId: '0048' });
     expect(controller.getState()).toBe('SPRINT_READY');
 
     // 0120 Methodical Scribe

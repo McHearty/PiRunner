@@ -37,7 +37,6 @@ function baseCtx(overrides: Partial<GuardContext> = {}): GuardContext {
   return {
     currentState: 'PROJECT_DISCOVERY' as any,
     targetState: 'PROJECT_INTAKE' as any,
-    workflowId: 'test-workflow',
     artifacts: {
       get: () => undefined,
       getByType: () => [],

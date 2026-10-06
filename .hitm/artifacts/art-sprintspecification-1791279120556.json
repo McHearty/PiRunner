@@ -1,0 +1,96 @@
+{
+  "artifactId": "art-sprintspecification-1791279120556",
+  "artifactType": "SprintSpecification",
+  "schemaVersion": "1.0.0",
+  "workflowId": "pirunner-canonical",
+  "taskId": "task-PLANNING",
+  "agentId": "0036",
+  "createdAt": "2026-10-06T09:32:00.556Z",
+  "parentArtifactIds": [],
+  "sourceRefs": [
+    {
+      "type": "SESSION",
+      "identifier": "run-1791279120556"
+    }
+  ],
+  "status": "SUBMITTED",
+  "payload": {
+    "masterSpecificationArtifactId": "art-spec",
+    "sprintNumber": 1,
+    "goals": [
+      "Answer 11 clarifying questions to establish requirements baseline",
+      "Document responses in structured specification format",
+      "Produce actionable requirements for subsequent implementation sprint"
+    ],
+    "tasks": [
+      {
+        "id": "TASK-1",
+        "title": "Gather product goal answers (Q1-Q4): purpose, target users, core value proposition, success metrics",
+        "requirementIds": [
+          "REQ-001",
+          "REQ-002",
+          "REQ-003",
+          "REQ-004"
+        ]
+      },
+      {
+        "id": "TASK-2",
+        "title": "Gather technical constraint answers (Q5-Q7): platform requirements, integration needs, scalability expectations",
+        "requirementIds": [
+          "REQ-005",
+          "REQ-006",
+          "REQ-007"
+        ]
+      },
+      {
+        "id": "TASK-3",
+        "title": "Gather UX and timeline answers (Q8-Q11): interface preferences, timeline constraints, budget considerations, deployment environment",
+        "requirementIds": [
+          "REQ-008",
+          "REQ-009",
+          "REQ-010",
+          "REQ-011"
+        ]
+      },
+      {
+        "id": "TASK-4",
+        "title": "Consolidate all 11 answers into MasterSpecification with clear requirement statements",
+        "requirementIds": [
+          "REQ-001",
+          "REQ-002",
+          "REQ-003",
+          "REQ-004",
+          "REQ-005",
+          "REQ-006",
+          "REQ-007",
+          "REQ-008",
+          "REQ-009",
+          "REQ-010",
+          "REQ-011"
+        ]
+      }
+    ],
+    "acceptanceCriteria": [
+      {
+        "id": "AC-001",
+        "statement": "All 11 questions have been answered and documented in the specification"
+      },
+      {
+        "id": "AC-002",
+        "statement": "Each question's answer is traceable to a specific requirement ID"
+      },
+      {
+        "id": "AC-003",
+        "statement": "Specification includes unambiguous product goals and success criteria"
+      },
+      {
+        "id": "AC-004",
+        "statement": "Technical constraints are explicitly stated and non-contradictory"
+      },
+      {
+        "id": "AC-005",
+        "statement": "MasterSpecification artifact is complete, valid JSON conforming to schema"
+      }
+    ]
+  }
+}
