@@ -1,5 +1,6 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { WorkflowIdentityService, WorkflowIdentity } from '../../../src/domain/workflow/WorkflowIdentity.js';
+import type { WorkflowState } from '../../../src/domain/workflow/WorkflowState.js';
 import { FileEventStore } from '../../../src/infrastructure/events/FileEventStore.js';
 import { existsSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -471,7 +472,7 @@ describe('Workflow Lifecycle (Sprint 8)', () => {
     store.append({
       eventId: 'evt-c-1', workflowId: oldId, sequence: 1, type: 'T',
       actorType: 'SYSTEM', actorId: '0000', timestamp: new Date().toISOString(),
-      stateBefore: 'PROJECT_INTAKE', stateAfter: 'IMPL', // illegal target
+      stateBefore: 'PROJECT_INTAKE', stateAfter: 'IMPL' as WorkflowState, // illegal target
       artifactIds: [], metadata: {}
     });
 

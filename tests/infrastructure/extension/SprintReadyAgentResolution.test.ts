@@ -79,7 +79,7 @@ describe('SPRINT_READY Agent Resolution (S9-P1-4 Regression)', () => {
     };
     
     // SPRINT_READY should NOT be in the role map
-    expect(roleMap['SPRINT_READY']).toBeUndefined();
+    expect((roleMap as Record<string, string>)['SPRINT_READY']).toBeUndefined();
     
     // And it should NOT fall back to 'CONCEPT'
     // (The old code would have returned 'CONCEPT' here)

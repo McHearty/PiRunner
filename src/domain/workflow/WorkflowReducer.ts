@@ -48,10 +48,14 @@ export function reduceWorkflowEvents(
     if (event.sequence !== expectedSeq) {
       throw new SequenceOrderError(expectedSeq, event.sequence);
     }
-    // Non-transition audit events (stateBefore === stateAfter) are not
-    // validated against the transition registry. They are replay-safe
-    // by definition since they don't change state.
-    if (event.stateBefore !== event.stateAfter) {
+    // Known audit event types are replay-safe and not validated against the
+    // transition registry. All other event types are treated as transitions
+    // and validated, regardless of state equality.
+    const AUDIT_EVENT_TYPES = new Set([
+      'WORKFLOW_ARCHIVED',
+      'REPOSITORY_CONFLICT_RESOLUTION'
+    ]);
+    if (!AUDIT_EVENT_TYPES.has(event.type)) {
       state = applyWorkflowEvent(state, event);
     }
     expectedSeq++;
