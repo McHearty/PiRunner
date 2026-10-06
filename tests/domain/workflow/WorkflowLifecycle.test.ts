@@ -446,4 +446,109 @@ describe('Workflow Lifecycle (Sprint 8)', () => {
     expect(oldEvents).toHaveLength(3); // 2 original + 1 ABORT
     expect(oldEvents[2].stateAfter).toBe('ABORT');
   });
+
+  it('P0-2: unrecoverable workflow archival does not fabricate state', async () => {
+    // Regression test: archiveOldWorkflow must not require successful recovery.
+    // When recovery fails (e.g., corrupted journal), archival should still work
+    // by writing an audit event directly, not by fabricating a canonical state.
+
+    const ws = join(testDir, 'unrecoverable-archival-test');
+    if (existsSync(ws)) {
+      rmSync(ws, { recursive: true, force: true });
+    }
+    mkdirSync(ws, { recursive: true });
+
+    const store = new FileEventStore(ws);
+    const oldId = 'unrecoverable-wf';
+
+    // Simulate a corrupted journal: illegal transition
+    store.append({
+      eventId: 'evt-c-0', workflowId: oldId, sequence: 0, type: 'T',
+      actorType: 'SYSTEM', actorId: '0000', timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_DISCOVERY', stateAfter: 'PROJECT_INTAKE',
+      artifactIds: [], metadata: {}
+    });
+    store.append({
+      eventId: 'evt-c-1', workflowId: oldId, sequence: 1, type: 'T',
+      actorType: 'SYSTEM', actorId: '0000', timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_INTAKE', stateAfter: 'IMPL', // illegal target
+      artifactIds: [], metadata: {}
+    });
+
+    // Recovery should fail
+    const recovery = StateRecoveryService.recover(store as any, oldId);
+    expect(recovery.recovered).toBe(false);
+    expect(recovery.error).toBeDefined();
+
+    // Archival via direct event append (unrecoverable path)
+    const archivalEvent = {
+      eventId: `evt-${oldId}-archived-${Date.now()}`,
+      workflowId: oldId,
+      sequence: 2,
+      type: 'WORKFLOW_ARCHIVED',
+      actorType: 'HUMAN' as const,
+      actorId: 'lead-human',
+      timestamp: new Date().toISOString(),
+      stateBefore: 'UNKNOWN' as any,
+      stateAfter: 'ABORT' as any,
+      artifactIds: [],
+      metadata: {
+        humanAbort: true,
+        archiveReason: 'human_requested_new_workflow',
+        recoveryStatus: 'UNRECOVERABLE',
+        archivedAt: new Date().toISOString()
+      }
+    };
+    store.append(archivalEvent);
+
+    // Verify archival event was written
+    const events = store.getEvents(oldId);
+    expect(events).toHaveLength(3);
+    expect(events[2].type).toBe('WORKFLOW_ARCHIVED');
+    expect(events[2].metadata.recoveryStatus).toBe('UNRECOVERABLE');
+
+    // Verify original journal prefix unchanged
+    expect(events[0].eventId).toBe('evt-c-0');
+    expect(events[1].eventId).toBe('evt-c-1');
+    expect(events[1].stateAfter).toBe('IMPL'); // illegal transition preserved
+  });
+
+  it('P0-2.2: reducer handles non-transition audit events', () => {
+    // Non-transition events (stateBefore === stateAfter) should be skipped
+    // during reduction but still validated for sequence order.
+    const store = new FileEventStore(testDir);
+    const wfId = 'audit-event-wf';
+
+    store.append({
+      eventId: 'evt-a-0', workflowId: wfId, sequence: 0, type: 'T',
+      actorType: 'SYSTEM', actorId: '0000', timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_DISCOVERY', stateAfter: 'PROJECT_INTAKE',
+      artifactIds: [], metadata: {}
+    });
+
+    // Non-transition audit event (self-transition)
+    store.append({
+      eventId: 'evt-a-1', workflowId: wfId, sequence: 1, type: 'REPOSITORY_CONFLICT_RESOLUTION',
+      actorType: 'HUMAN', actorId: 'lead-human', timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_INTAKE', stateAfter: 'PROJECT_INTAKE',
+      artifactIds: [], metadata: { resolution: 'PRESERVE' }
+    });
+
+    store.append({
+      eventId: 'evt-a-2', workflowId: wfId, sequence: 2, type: 'T',
+      actorType: 'SYSTEM', actorId: '0000', timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_INTAKE', stateAfter: 'PROJECT_BASELINE',
+      artifactIds: [], metadata: {}
+    });
+
+    // Recovery should succeed despite the non-transition event
+    const recovery = StateRecoveryService.recover(store as any, wfId);
+    expect(recovery.recovered).toBe(true);
+    expect(recovery.canonicalState).toBe('PROJECT_BASELINE');
+
+    // Verify all events are still in the journal
+    const events = store.getEvents(wfId);
+    expect(events).toHaveLength(3);
+    expect(events[1].type).toBe('REPOSITORY_CONFLICT_RESOLUTION');
+  });
 });

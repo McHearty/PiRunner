@@ -48,7 +48,12 @@ export function reduceWorkflowEvents(
     if (event.sequence !== expectedSeq) {
       throw new SequenceOrderError(expectedSeq, event.sequence);
     }
-    state = applyWorkflowEvent(state, event);
+    // Non-transition audit events (stateBefore === stateAfter) are not
+    // validated against the transition registry. They are replay-safe
+    // by definition since they don't change state.
+    if (event.stateBefore !== event.stateAfter) {
+      state = applyWorkflowEvent(state, event);
+    }
     expectedSeq++;
   }
 

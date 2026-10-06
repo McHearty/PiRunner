@@ -134,26 +134,56 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   async function archiveOldWorkflow(oldWorkflowId: string, reason: string, validationStatus: string): Promise<void> {
     // Recover old workflow's canonical state
     const recovery = StateRecoveryService.recover(eventStore as any, oldWorkflowId);
-    if (!recovery.recovered) {
-      throw new Error(`Cannot recover old workflow ${oldWorkflowId} for archival`);
-    }
     
-    // Construct controller at recovered state, not hardcoded PROJECT_DISCOVERY
-    const oldController = createController(oldWorkflowId, recovery.canonicalState);
-    
-    // Transition to ABORT with archival metadata and required human authorization
-    await oldController.transition('ABORT', 
-      { actorType: 'HUMAN', actorId: 'lead-human' }, 
-      {
-        humanApproved: true,
+    if (recovery.recovered) {
+      // Recoverable path: transition through controller to ABORT via T-106
+      const oldController = createController(oldWorkflowId, recovery.canonicalState);
+      await oldController.transition('ABORT',
+        { actorType: 'HUMAN', actorId: 'lead-human' },
+        {
+          humanApproved: true,
+          metadata: {
+            humanAbort: true,
+            archiveReason: reason,
+            validationStatus: validationStatus,
+            recoveryStatus: 'RECOVERED',
+            archivedAt: new Date().toISOString()
+          }
+        }
+      );
+    } else {
+      // Unrecoverable path: write archival audit event directly.
+      // Do not construct a controller or fabricate a canonical state.
+      // Do not rewrite the existing journal.
+      const archivalEvent = {
+        eventId: `evt-${oldWorkflowId}-archived-${Date.now()}`,
+        workflowId: oldWorkflowId,
+        sequence: eventStore.getNextSequence(oldWorkflowId),
+        type: 'WORKFLOW_ARCHIVED',
+        actorType: 'HUMAN' as const,
+        actorId: 'lead-human',
+        timestamp: new Date().toISOString(),
+        stateBefore: 'UNKNOWN' as any,
+        stateAfter: 'ABORT' as any,
+        artifactIds: [],
         metadata: {
           humanAbort: true,
           archiveReason: reason,
           validationStatus: validationStatus,
+          recoveryStatus: 'UNRECOVERABLE',
+          recoveryError: recovery.error,
           archivedAt: new Date().toISOString()
         }
-      }
-    );
+      };
+      eventStore.append(archivalEvent);
+    }
+
+    // Mark old workflow identity as non-active
+    const identity = WorkflowIdentityService.load(root);
+    if (identity && identity.workflowId === oldWorkflowId) {
+      identity.status = 'ABORTED';
+      WorkflowIdentityService.save(identity, root);
+    }
   }
 
   const resolved = resolveWorkflowIdentity();
