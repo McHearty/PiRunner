@@ -43,14 +43,13 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
 
   // Workflow identity management (Sprint 8)
   function resolveWorkflowIdentity(): { workflowId: string; controller: WorkflowController } {
-    const identity = WorkflowIdentityService.load(root);
-    
-    if (identity && identity.status === 'ACTIVE') {
-      // Resume existing active workflow
+    // Use discovery to identify active workflow (now identity-aware)
+    if (discovery.entryMode === 'RESUME_WORKFLOW' && discovery.activeWorkflowId) {
+      // Resume existing active workflow identified by discovery
       return {
-        workflowId: identity.workflowId,
+        workflowId: discovery.activeWorkflowId,
         controller: new WorkflowController(
-          identity.workflowId,
+          discovery.activeWorkflowId,
           artifactStore as any,
           eventStore as any,
           testRunner,
@@ -63,10 +62,8 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
       };
     }
     
-    // No active workflow or none exists - will be determined by discovery/human gate
-    // For now, use legacy behavior with hardcoded ID for existing workflows
     if (discovery.entryMode === 'RESUME_WORKFLOW') {
-      // Existing journal without identity file - use legacy ID
+      // Legacy: existing journal without identity file
       return {
         workflowId: 'pirunner-canonical',
         controller: new WorkflowController(
@@ -122,24 +119,25 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     );
   }
 
-  function archiveOldWorkflow(oldWorkflowId: string, reason: string, validationStatus: string): void {
-    const resolutionEvent: any = {
-      eventId: `evt-${oldWorkflowId}-archived-${Date.now()}`,
-      workflowId: oldWorkflowId,
-      sequence: eventStore.getNextSequence(oldWorkflowId),
-      type: 'WORKFLOW_ARCHIVED',
-      actorType: 'HUMAN',
-      actorId: 'lead-human',
-      timestamp: new Date().toISOString(),
-      stateBefore: 'PROJECT_DISCOVERY',
-      stateAfter: 'PROJECT_DISCOVERY',
-      artifactIds: [],
-      metadata: {
-        reason: reason,
-        validationStatus: validationStatus
-      }
-    };
-    eventStore.append(resolutionEvent);
+  async function archiveOldWorkflow(oldWorkflowId: string, reason: string, validationStatus: string): Promise<void> {
+    // Use legal ABORT transition with archival metadata instead of fake self-loop event
+    const oldController = createController(oldWorkflowId);
+    
+    // Recover to current state first to ensure valid transition path
+    const recovery = StateRecoveryService.recover(eventStore as any, oldWorkflowId);
+    if (recovery.recovered) {
+      // Transition to ABORT with archival metadata
+      await oldController.transition('ABORT', 
+        { actorType: 'HUMAN', actorId: 'lead-human' }, 
+        {
+          metadata: {
+            archiveReason: reason,
+            validationStatus: validationStatus,
+            archivedAt: new Date().toISOString()
+          }
+        }
+      );
+    }
   }
 
   const resolved = resolveWorkflowIdentity();
@@ -510,7 +508,7 @@ ${deliverableInstruction}`;
             } else if (choice && choice.startsWith('START NEW')) {
               // Archive old workflow and start new
               ctx.ui.notify(`Archiving workflow [${workflowId}] and starting new workflow...`, 'info');
-              archiveOldWorkflow(workflowId, 'human_requested_new_workflow', validation.status);
+              await archiveOldWorkflow(workflowId, 'human_requested_new_workflow', validation.status);
               
               // Update identity to new workflow
               const newId = WorkflowIdentityService.generateNewId();

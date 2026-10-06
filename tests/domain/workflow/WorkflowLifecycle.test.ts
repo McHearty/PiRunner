@@ -1,8 +1,11 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
 import { WorkflowIdentityService, WorkflowIdentity } from '../../../src/domain/workflow/WorkflowIdentity.js';
 import { FileEventStore } from '../../../src/infrastructure/events/FileEventStore.js';
 import { existsSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { ProjectDiscoveryService, ProjectEntryMode } from '../../../src/domain/project/ProjectDiscovery.js';
+import { StateRecoveryService } from '../../../src/domain/project/StateRecovery.js';
+import { WorkflowController } from '../../../src/application/WorkflowController.js';
 
 describe('Workflow Lifecycle (Sprint 8)', () => {
   const testDir = join(process.cwd(), '.hitm', 'hermetic-lifecycle-test');
@@ -82,19 +85,22 @@ describe('Workflow Lifecycle (Sprint 8)', () => {
       metadata: {}
     });
     
-    // Archive old workflow
+    // Archive old workflow (using ABORT transition pattern)
     store.append({
       eventId: 'evt-old-archived',
       workflowId: 'old-workflow',
       sequence: 2,
-      type: 'WORKFLOW_ARCHIVED',
+      type: 'TRANSITION',
       actorType: 'HUMAN',
       actorId: 'lead-human',
       timestamp: new Date().toISOString(),
-      stateBefore: 'PROJECT_DISCOVERY',
-      stateAfter: 'PROJECT_DISCOVERY',
+      stateBefore: 'PROJECT_BASELINE',
+      stateAfter: 'ABORT',
       artifactIds: [],
-      metadata: { reason: 'human_requested_new_workflow' }
+      metadata: {
+        archiveReason: 'human_requested_new_workflow',
+        archivedAt: new Date().toISOString()
+      }
     });
     
     // Start new workflow
@@ -117,7 +123,8 @@ describe('Workflow Lifecycle (Sprint 8)', () => {
     const oldWorkflowEvents = store.getEvents('old-workflow');
     expect(oldWorkflowEvents).toHaveLength(3);
     expect(oldWorkflowEvents[0].eventId).toBe('evt-old-0');
-    expect(oldWorkflowEvents[2].type).toBe('WORKFLOW_ARCHIVED');
+    expect(oldWorkflowEvents[2].stateAfter).toBe('ABORT');
+    expect(oldWorkflowEvents[2].metadata).toHaveProperty('archiveReason');
     
     // Verify new workflow starts at sequence 0
     const newWorkflowEvents = store.getEvents(newWorkflowId);
@@ -157,5 +164,63 @@ describe('Workflow Lifecycle (Sprint 8)', () => {
     expect(store.getNextSequence('B')).toBe(1);
     expect(store.getEvents('A')).toHaveLength(2);
     expect(store.getEvents('B')).toHaveLength(1);
+  });
+
+  it('discovery identifies active workflow from identity (not just journal existence)', () => {
+    // Create a test workspace with identity file
+    const ws = join(testDir, 'discovery-test');
+    if (existsSync(ws)) {
+      rmSync(ws, { recursive: true, force: true });
+    }
+    mkdirSync(ws, { recursive: true });
+    
+    // Save active workflow identity
+    const identity: WorkflowIdentity = {
+      workflowId: 'active-wf-1',
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString()
+    };
+    WorkflowIdentityService.save(identity, ws);
+    
+    // Create empty events.jsonl (no events yet)
+    const store = new FileEventStore(ws);
+    // Don't add any events - journal is empty
+    
+    // Discovery should still identify active workflow via identity
+    const discovery = ProjectDiscoveryService.inspect(ws);
+    expect(discovery.entryMode).toBe('RESUME_WORKFLOW');
+    expect(discovery.activeWorkflowId).toBe('active-wf-1');
+  });
+
+  it('archived workflow remains recoverable (replayable)', () => {
+    const store = new FileEventStore(testDir);
+    
+    // Create workflow with legal transitions
+    store.append({
+      eventId: 'evt-r-0', workflowId: 'recoverable-wf', sequence: 0, type: 'T',
+      actorType: 'SYSTEM', actorId: '0', timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_DISCOVERY', stateAfter: 'PROJECT_INTAKE',
+      artifactIds: [], metadata: {}
+    });
+    
+    store.append({
+      eventId: 'evt-r-1', workflowId: 'recoverable-wf', sequence: 1, type: 'T',
+      actorType: 'SYSTEM', actorId: '0', timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_INTAKE', stateAfter: 'PROJECT_BASELINE',
+      artifactIds: [], metadata: {}
+    });
+    
+    // Archive with legal ABORT transition
+    store.append({
+      eventId: 'evt-r-2', workflowId: 'recoverable-wf', sequence: 2, type: 'T',
+      actorType: 'HUMAN', actorId: '0', timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_BASELINE', stateAfter: 'ABORT',
+      artifactIds: [], metadata: { archiveReason: 'test' }
+    });
+    
+    // Recovery should succeed and find ABORT state
+    const recovery = StateRecoveryService.recover(store as any, 'recoverable-wf');
+    expect(recovery.recovered).toBe(true);
+    expect(recovery.canonicalState).toBe('ABORT');
   });
 });

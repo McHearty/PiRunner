@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 import { StoredArtifact } from '../artifacts/ArtifactStore.js';
 import { RepositorySnapshot } from '../workflow/Guards.js';
+import { WorkflowIdentityService } from '../workflow/WorkflowIdentity.js';
 
 export type ProjectEntryMode = 'NEW_PROJECT' | 'ADOPT_EXISTING_PROJECT' | 'RESUME_WORKFLOW' | 'START_NEW_WORKFLOW';
 
@@ -11,6 +12,7 @@ export interface ProjectDiscoveryResult {
   repositorySnapshot: RepositorySnapshot;
   hasCanonicalEvents: boolean;
   eventCount: number;
+  activeWorkflowId?: string;
 }
 
 export class ProjectDiscoveryService {
@@ -29,7 +31,14 @@ export class ProjectDiscoveryService {
     const repositorySnapshot = this.captureRepositorySnapshot(workspaceRoot);
 
     let entryMode: ProjectEntryMode;
-    if (hasCanonicalEvents) {
+    
+    // Sprint 8: Check workflow identity first
+    const identity = WorkflowIdentityService.load(workspaceRoot);
+    if (identity && identity.status === 'ACTIVE') {
+      // Active workflow exists - resume it regardless of journal existence
+      entryMode = 'RESUME_WORKFLOW';
+    } else if (hasCanonicalEvents) {
+      // Journal exists but no active identity - historical workflows only
       entryMode = 'RESUME_WORKFLOW';
     } else {
       // Check if project has pre-existing source files or commits
@@ -47,7 +56,8 @@ export class ProjectDiscoveryService {
       entryMode,
       repositorySnapshot,
       hasCanonicalEvents,
-      eventCount
+      eventCount,
+      activeWorkflowId: identity && identity.status === 'ACTIVE' ? identity.workflowId : undefined
     };
   }
 
