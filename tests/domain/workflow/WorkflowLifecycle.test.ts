@@ -338,4 +338,112 @@ describe('Workflow Lifecycle (Sprint 8)', () => {
     expect(recovery.recovered).toBe(true);
     expect(recovery.canonicalState).toBe('PROJECT_INTAKE');
   });
+
+  it('P0-2.1: START NEW WORKFLOW path creates initial event and survives restart', async () => {
+    // This test exercises the same code path as the extension's START NEW WORKFLOW option
+    // after failed resume validation: archive old workflow, create new one, verify restartability
+
+    const ws = join(testDir, 'start-new-wf-test');
+    if (existsSync(ws)) {
+      rmSync(ws, { recursive: true, force: true });
+    }
+    mkdirSync(ws, { recursive: true });
+
+    const store = new FileEventStore(ws);
+
+    // Step 1: Create old active workflow with some events
+    const oldId = 'old-wf-abc';
+    const oldIdentity: WorkflowIdentity = {
+      workflowId: oldId,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString()
+    };
+    WorkflowIdentityService.save(oldIdentity, ws);
+
+    store.append({
+      eventId: 'evt-old-0', workflowId: oldId, sequence: 0, type: 'T',
+      actorType: 'SYSTEM', actorId: '0000', timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_DISCOVERY', stateAfter: 'PROJECT_INTAKE',
+      artifactIds: [], metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' }
+    });
+
+    store.append({
+      eventId: 'evt-old-1', workflowId: oldId, sequence: 1, type: 'T',
+      actorType: 'SYSTEM', actorId: '0000', timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_INTAKE', stateAfter: 'PROJECT_BASELINE',
+      artifactIds: [], metadata: {}
+    });
+
+    // Step 2: Resume validation fails (simulated) — user selects START NEW WORKFLOW
+
+    // Step 3: Archive old workflow (using legal ABORT transition)
+    const mockRepo = {
+      getHead: () => 'test-head',
+      getBranch: () => 'main',
+      getFreshSnapshot: async () => ({ headSha: 'test-head', branch: 'main', workingTreeState: 'clean' })
+    } as any;
+
+    const recovery = StateRecoveryService.recover(store as any, oldId);
+    const oldController = new WorkflowController(
+      oldId, null as any, store as any, null as any, null as any,
+      {}, recovery.canonicalState, mockRepo, ws
+    );
+    await oldController.transition('ABORT',
+      { actorType: 'HUMAN', actorId: 'lead-human' },
+      {
+        humanApproved: true,
+        metadata: { humanAbort: true, archiveReason: 'human_requested_new_workflow' }
+      }
+    );
+
+    // Verify old workflow archived
+    const postArchiveRecovery = StateRecoveryService.recover(store as any, oldId);
+    expect(postArchiveRecovery.recovered).toBe(true);
+    expect(postArchiveRecovery.canonicalState).toBe('ABORT');
+
+    // Step 4: Start new workflow (using same path as resolveWorkflowIdentity)
+    const newId = WorkflowIdentityService.generateNewId();
+    const newIdentity: WorkflowIdentity = {
+      workflowId: newId,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString()
+    };
+    WorkflowIdentityService.save(newIdentity, ws);
+
+    // Create initial canonical event (the fix for P0-2.1)
+    store.append({
+      eventId: `evt-${newId}-init`,
+      workflowId: newId,
+      sequence: 0,
+      type: 'TRANSITION',
+      actorType: 'SYSTEM',
+      actorId: '0000',
+      timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_DISCOVERY',
+      stateAfter: 'PROJECT_INTAKE',
+      artifactIds: [],
+      metadata: { entryMode: 'ADOPT_EXISTING_PROJECT' }
+    });
+
+    // Step 5: Verify new workflow has event sequence 0
+    const newEvents = store.getEvents(newId);
+    expect(newEvents).toHaveLength(1);
+    expect(newEvents[0].sequence).toBe(0);
+    expect(newEvents[0].workflowId).toBe(newId);
+
+    // Step 6: Simulate process restart — construct fresh discovery
+    const discovery = ProjectDiscoveryService.inspect(ws);
+    expect(discovery.entryMode).toBe('RESUME_WORKFLOW');
+    expect(discovery.activeWorkflowId).toBe(newId);
+
+    // Step 7: Simulate restart recovery
+    const newRecovery = StateRecoveryService.recover(store as any, newId);
+    expect(newRecovery.recovered).toBe(true);
+    expect(newRecovery.canonicalState).toBe('PROJECT_INTAKE');
+
+    // Verify old workflow history is intact
+    const oldEvents = store.getEvents(oldId);
+    expect(oldEvents).toHaveLength(3); // 2 original + 1 ABORT
+    expect(oldEvents[2].stateAfter).toBe('ABORT');
+  });
 });

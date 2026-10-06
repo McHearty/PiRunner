@@ -12,7 +12,7 @@ import { PiAgentRunner } from './infrastructure/pi/PiAgentRunner.js';
 import { GitRepository } from './infrastructure/git/GitRepository.js';
 import { AgentPromptFactory } from './agents/AgentPrompts.js';
 import { WorkflowState } from './domain/workflow/WorkflowState.js';
-import { ProjectDiscoveryService } from './domain/project/ProjectDiscovery.js';
+import { ProjectDiscoveryService, ProjectEntryMode } from './domain/project/ProjectDiscovery.js';
 import { ProjectIntakeService } from './domain/project/ProjectIntake.js';
 import { StateRecoveryService } from './domain/project/StateRecovery.js';
 import { StateValidationService } from './domain/project/StateValidation.js';
@@ -81,39 +81,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     }
     
     // New workflow
-    const newId = WorkflowIdentityService.generateNewId();
-    const newIdentity: WorkflowIdentity = {
-      workflowId: newId,
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString()
-    };
-    WorkflowIdentityService.save(newIdentity, root);
-    
-    // Create first canonical event immediately (not deferred to session_start)
-    // This ensures the workflow is restartable even if process is killed before transitions complete
-    const stateAfter = discovery.entryMode === 'NEW_PROJECT' ? 'CONCEPT' : 'PROJECT_INTAKE';
-    
-    eventStore.append({
-      eventId: `evt-${newId}-init`,
-      workflowId: newId,
-      sequence: 0,
-      type: 'TRANSITION',
-      actorType: 'SYSTEM',
-      actorId: '0000',
-      timestamp: new Date().toISOString(),
-      stateBefore: 'PROJECT_DISCOVERY',
-      stateAfter: stateAfter as WorkflowState,
-      artifactIds: [],
-      metadata: { entryMode: discovery.entryMode }
-    });
-    
-    // Controller resumes at the state after the initial transition
-    const newController = createController(newId, stateAfter as WorkflowState);
-    
-    return {
-      workflowId: newId,
-      controller: newController
-    };
+    return startNewWorkflow(discovery.entryMode);
   }
 
   function createController(wfId: string, initialState: WorkflowState = 'PROJECT_DISCOVERY'): WorkflowController {
@@ -128,6 +96,39 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
       gitRepo,
       root
     );
+  }
+
+  function startNewWorkflow(entryMode: ProjectEntryMode): { workflowId: string; controller: WorkflowController } {
+    const newId = WorkflowIdentityService.generateNewId();
+    const newIdentity: WorkflowIdentity = {
+      workflowId: newId,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString()
+    };
+    WorkflowIdentityService.save(newIdentity, root);
+
+    // Create first canonical event immediately (not deferred to session_start)
+    // This ensures the workflow is restartable even if process is killed before transitions complete
+    const stateAfter = entryMode === 'NEW_PROJECT' ? 'CONCEPT' : 'PROJECT_INTAKE';
+
+    eventStore.append({
+      eventId: `evt-${newId}-init`,
+      workflowId: newId,
+      sequence: 0,
+      type: 'TRANSITION',
+      actorType: 'SYSTEM',
+      actorId: '0000',
+      timestamp: new Date().toISOString(),
+      stateBefore: 'PROJECT_DISCOVERY',
+      stateAfter: stateAfter as WorkflowState,
+      artifactIds: [],
+      metadata: { entryMode }
+    });
+
+    // Controller resumes at the state after the initial transition
+    const newController = createController(newId, stateAfter as WorkflowState);
+
+    return { workflowId: newId, controller: newController };
   }
 
   async function archiveOldWorkflow(oldWorkflowId: string, reason: string, validationStatus: string): Promise<void> {
@@ -524,20 +525,13 @@ ${deliverableInstruction}`;
               // Archive old workflow and start new
               ctx.ui.notify(`Archiving workflow [${workflowId}] and starting new workflow...`, 'info');
               await archiveOldWorkflow(workflowId, 'human_requested_new_workflow', validation.status);
-              
-              // Update identity to new workflow
-              const newId = WorkflowIdentityService.generateNewId();
-              const newIdentity: WorkflowIdentity = {
-                workflowId: newId,
-                status: 'ACTIVE',
-                createdAt: new Date().toISOString()
-              };
-              WorkflowIdentityService.save(newIdentity, root);
-              
-              workflowId = newId;
-              controller = createController(workflowId);
+
+              // Use canonical new-workflow creation path
+              const newWf = startNewWorkflow(discovery.entryMode);
+              workflowId = newWf.workflowId;
+              controller = newWf.controller;
               discovery = ProjectDiscoveryService.inspect(root);
-              
+
               ctx.ui.notify(`New workflow [${workflowId}] created. Starting from discovery.`, 'info');
               updateFooterStatus(ctx);
             } else {
