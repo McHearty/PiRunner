@@ -847,16 +847,19 @@ GUARDS['G-SKILL-001'] = {
   id: 'G-SKILL-001',
   description: 'Anti-proliferation rule: procedure has >=3 real uses in devlogs or events',
   evaluate: (ctx) => {
-    // Check if candidate skill metadata provides >=3 verified uses
-    const uses = (ctx.metadata?.candidateSkillUses as any[]) || [];
-    if (uses.length >= 3) {
-      return pass(`Anti-proliferation verified: procedure has ${uses.length} real uses`);
+    // Check if candidate skill artifact provides >=3 verified uses
+    const skills = ctx.artifacts.getByType('SkillPackage');
+    const candidate = skills.find(a => a.status === 'SUBMITTED' || a.status === 'ACCEPTED');
+    if (candidate) {
+      const payload = candidate.payload as any;
+      if (payload.verifiedUses && Array.isArray(payload.verifiedUses) && payload.verifiedUses.length >= 3) {
+        return pass(`Anti-proliferation verified: procedure has ${payload.verifiedUses.length} real uses`);
+      }
+      if (payload.verifiedUses && !Array.isArray(payload.verifiedUses)) {
+        return fail('Anti-proliferation violation: verifiedUses must be an array of use identifiers');
+      }
+      return fail(`Anti-proliferation violation: procedure has ${payload.verifiedUses?.length ?? 0} verified uses; minimum 3 required`);
     }
-    // Alternatively check historical devlog occurrences
-    const devlogs = ctx.artifacts.getByType('DailyDevlog');
-    if (devlogs.length >= 3) {
-      return pass('Anti-proliferation satisfied by multi-day devlog history');
-    }
-    return fail('Anti-proliferation violation: procedure has fewer than 3 verified uses; cannot graduate to skill');
+    return fail('Anti-proliferation violation: no SkillPackage artifact found to verify uses');
   }
 };

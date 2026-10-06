@@ -153,4 +153,77 @@ describe('Guard Invariant Coverage (Sprint 6)', () => {
       expect(result.satisfied).toBe(true);
     });
   });
+
+  describe('G-SKILL-001: Anti-proliferation rule', () => {
+    it('passes when SkillPackage has >=3 verified uses', () => {
+      const skill: StoredArtifact<any> = {
+        artifactId: 'art-skill',
+        artifactType: 'SkillPackage',
+        schemaVersion: '1.0.0',
+        workflowId: 'wf-test',
+        taskId: 't-1',
+        agentId: '0012',
+        createdAt: new Date().toISOString(),
+        parentArtifactIds: [],
+        sourceRefs: [],
+        status: 'SUBMITTED',
+        payload: {
+          name: 'test-skill',
+          version: '1.0.0',
+          targetRole: 'IMPLEMENTATION',
+          description: 'Test skill',
+          parameterizedInputs: [],
+          procedure: ['Step 1'],
+          successCriteria: ['Success'],
+          verifiedUses: ['use-1', 'use-2', 'use-3']
+        }
+      };
+      const result = GUARDS['G-SKILL-001'].evaluate(baseCtx({
+        artifacts: {
+          get: () => undefined,
+          getByType: (type: string) => type === 'SkillPackage' ? [skill] : [],
+          getLatestAccepted: (type: string) => type === 'SkillPackage' ? skill : undefined
+        }
+      }));
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('fails when SkillPackage has fewer than 3 verified uses', () => {
+      const skill: StoredArtifact<any> = {
+        artifactId: 'art-skill',
+        artifactType: 'SkillPackage',
+        schemaVersion: '1.0.0',
+        workflowId: 'wf-test',
+        taskId: 't-1',
+        agentId: '0012',
+        createdAt: new Date().toISOString(),
+        parentArtifactIds: [],
+        sourceRefs: [],
+        status: 'SUBMITTED',
+        payload: {
+          name: 'test-skill',
+          version: '1.0.0',
+          targetRole: 'IMPLEMENTATION',
+          description: 'Test skill',
+          parameterizedInputs: [],
+          procedure: ['Step 1'],
+          successCriteria: ['Success'],
+          verifiedUses: ['use-1', 'use-2']
+        }
+      };
+      const result = GUARDS['G-SKILL-001'].evaluate(baseCtx({
+        artifacts: {
+          get: () => undefined,
+          getByType: (type: string) => type === 'SkillPackage' ? [skill] : [],
+          getLatestAccepted: (type: string) => type === 'SkillPackage' ? skill : undefined
+        }
+      }));
+      expect(result.satisfied).toBe(false);
+    });
+
+    it('fails when no SkillPackage artifact exists', () => {
+      const result = GUARDS['G-SKILL-001'].evaluate(baseCtx({}));
+      expect(result.satisfied).toBe(false);
+    });
+  });
 });
