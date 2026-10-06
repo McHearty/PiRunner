@@ -244,8 +244,22 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
 ROLE DIRECTIVE: You are strictly ${AgentRosterService.formatBadge(agent)} (Planning Specialist).
 The Knowledge Synchronization phase is FINISHED. You are NO LONGER the Knowledge Specialist.
 Do NOT write code or edit files. You have NO permission to edit files.
-Your ONLY job is to take the user's request and formulate a SprintSpecification JSON artifact.
-Decompose the user's intent into sprint goals, tasks for Confident Forge, and acceptance criteria for Methodical Scribe.`;
+
+Your primary responsibility is to understand the user's planning intent through conversation.
+When the user is describing goals, asking questions, providing requirements, or exploring work,
+converse naturally and ask clarifying questions when needed.
+
+Do NOT prematurely produce a SprintSpecification merely because the user mentions planning,
+questions, requirements, or sprints.
+
+Only produce the SprintSpecification artifact when:
+1. The user's requirements are sufficiently understood, AND
+2. The user explicitly asks you to formalize the discussion into a plan, or otherwise
+   clearly authorizes plan generation.
+
+Until then, remain conversational and do not emit a SprintSpecification artifact.
+When you do produce the SprintSpecification, decompose the requirements into sprint goals,
+tasks for Confident Forge, and acceptance criteria for Methodical Scribe.`;
     } else if (state === 'TEST_AUTHORING') {
       roleGuidance = `
 ROLE DIRECTIVE: You are strictly ${AgentRosterService.formatBadge(agent)} (Test Authoring Specialist).
@@ -326,20 +340,10 @@ ${deliverableInstruction}`;
       const taskText = selected.replace(/^\d+\.\s*/, '');
       ctx.ui.notify(`Dispatching ${badge}: "${taskText}"`, 'info');
       await dispatchTurnToModel(taskText, ctx);
-    } else if (selected && selected.startsWith('Other')) {
-      if (typeof (ctx.ui as any).input === 'function') {
-        const customPrompt = await (ctx.ui as any).input(
-          `Custom Task for ${badge} [${newState}]`,
-          'Enter custom goal or prompt (e.g. "Update documentation and create commit")'
-        );
-        if (customPrompt && customPrompt.trim()) {
-          await dispatchTurnToModel(customPrompt.trim(), ctx);
-          return;
-        }
-      }
-      ctx.ui.notify(`Chat naturally with ${badge} in the prompt below.`, 'info');
     } else {
-      ctx.ui.notify(`Active agent is now ${badge}. Chat naturally below or use /hitm-tasks.`, 'info');
+      // Natural conversation or custom task: continue in Pi's normal chat input.
+      // Do NOT force user through extension modal input (clipboard UX defect).
+      ctx.ui.notify(`Continue the conversation with ${badge} using the normal Pi chat input.`, 'info');
     }
   }
 
@@ -669,7 +673,10 @@ You have ZERO state transition authority. Transitions are strictly governed by P
           );
           if (confirmed) {
             try {
-              await controller.transition(target, { actorType: 'AGENT', actorId: currentAgent.id }, { artifactIds: [ingestion.artifact.artifactId] });
+              await controller.transition(target, { actorType: 'AGENT', actorId: currentAgent.id }, {
+                humanApproved: true,
+                artifactIds: [ingestion.artifact.artifactId]
+              });
               updateFooterStatus(ctx);
               ctx.ui.notify(`State advanced to [${controller.getState()}]`, 'info');
 
