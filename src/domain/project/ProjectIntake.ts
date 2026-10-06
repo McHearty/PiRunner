@@ -72,6 +72,8 @@ export class ProjectIntakeService {
 
     const documentationRefs: any[] = [];
     if (existsSync(join(workspaceRoot, 'README.md'))) documentationRefs.push({ type: 'FILE', identifier: 'README.md' });
+    if (existsSync(join(workspaceRoot, 'AGENTS.md'))) documentationRefs.push({ type: 'FILE', identifier: 'AGENTS.md' });
+    if (existsSync(join(workspaceRoot, 'CLAUDE.md'))) documentationRefs.push({ type: 'FILE', identifier: 'CLAUDE.md' });
 
     const existingCiConfiguration: any[] = [];
     const ghWorkflows = join(workspaceRoot, '.github', 'workflows');
