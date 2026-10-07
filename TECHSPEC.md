@@ -1125,7 +1125,7 @@ PiRunner must never silently reconcile mismatch.
 
 ## 21. Normative Transition Registry
 
-Every legal transition is explicitly enumerated across 86 executable transition guards.
+Every legal transition is explicitly enumerated across 83 executable transition guards.
 
 No other transitions are permitted.
 
