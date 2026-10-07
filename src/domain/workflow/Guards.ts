@@ -318,10 +318,25 @@ export const GUARDS: Record<string, GuardDefinition> = {
   },
   'G-ART-022': {
     id: 'G-ART-022',
-    description: 'Valid KnowledgeSnapshot verified',
+    description: 'Valid KnowledgeSnapshot verified with meaningful content',
     evaluate: (ctx) => {
-      const snap = ctx.artifacts.getByType('KnowledgeSnapshot');
-      return snap.length > 0 ? pass() : fail('No KnowledgeSnapshot available');
+      const snapshots = ctx.artifacts.getByType('KnowledgeSnapshot');
+      if (snapshots.length === 0) {
+        return fail('No KnowledgeSnapshot available');
+      }
+      // Verify meaningful content: at least source revision or evidence required
+      const snap = snapshots[0];
+      const payload = snap.payload as any;
+      const hasSourceRevision = payload.sourceRevision && typeof payload.sourceRevision === 'string' && payload.sourceRevision.trim().length > 0;
+      // At least one evidence collection should have content
+      const hasFiles = Array.isArray(payload.relevantSourceFiles) && payload.relevantSourceFiles.length > 0;
+      const hasSymbols = Array.isArray(payload.relevantSymbols) && payload.relevantSymbols.length > 0;
+      const hasDeps = Array.isArray(payload.dependencies) && payload.dependencies.length > 0;
+      const hasDocs = Array.isArray(payload.documentationRefs) && payload.documentationRefs.length > 0;
+      if (!hasSourceRevision && !hasFiles && !hasSymbols && !hasDeps && !hasDocs) {
+        return fail('KnowledgeSnapshot has no meaningful content (no source revision, source files, symbols, dependencies, or documentation refs)');
+      }
+      return pass();
     }
   },
   'G-ART-023': {
@@ -519,13 +534,10 @@ export const GUARDS: Record<string, GuardDefinition> = {
     id: 'G-TEST-013',
     description: 'Valid TestExecutionResult matches accepted TestSpecification and lock',
     evaluate: (ctx) => {
-      const execResults = ctx.artifacts.getByType('TestExecutionResult');
-      if (execResults.length === 0) {
+      const execResult = ctx.artifacts.getLatestAccepted('TestExecutionResult');
+      if (!execResult) {
         return fail('No TestExecutionResult found');
       }
-
-      // Use getLatestAccepted to find the most recent accepted result
-      const execResult = execResults[execResults.length - 1];
       const payload = execResult.payload as any;
 
       // Check status is PASSED
@@ -665,13 +677,10 @@ export const GUARDS: Record<string, GuardDefinition> = {
     id: 'G-TEST-016',
     description: 'Valid TestExecutionResult corresponds to commit under review',
     evaluate: (ctx) => {
-      const execResults = ctx.artifacts.getByType('TestExecutionResult');
-      if (execResults.length === 0) {
+      const execResult = ctx.artifacts.getLatestAccepted('TestExecutionResult');
+      if (!execResult) {
         return fail('No TestExecutionResult available for review');
       }
-
-      // Use getLatestAccepted to find the most recent result
-      const execResult = execResults[execResults.length - 1];
       const payload = execResult.payload as any;
 
       // Check status is PASSED
@@ -891,13 +900,16 @@ GUARDS['G-SKILL-001'] = {
     const candidate = skills.find(a => a.status === 'SUBMITTED' || a.status === 'ACCEPTED');
     if (candidate) {
       const payload = candidate.payload as any;
-      if (payload.verifiedUses && Array.isArray(payload.verifiedUses) && payload.verifiedUses.length >= 3) {
-        return pass(`Anti-proliferation verified: procedure has ${payload.verifiedUses.length} real uses`);
-      }
-      if (payload.verifiedUses && !Array.isArray(payload.verifiedUses)) {
+      if (!payload.verifiedUses || !Array.isArray(payload.verifiedUses)) {
         return fail('Anti-proliferation violation: verifiedUses must be an array of use identifiers');
       }
-      return fail(`Anti-proliferation violation: procedure has ${payload.verifiedUses?.length ?? 0} verified uses; minimum 3 required`);
+      // Verify distinct, non-empty use identifiers (evidence-based check)
+      const validUses = payload.verifiedUses.filter((u: string) => typeof u === 'string' && u.trim().length > 0);
+      const distinctUses = new Set(validUses);
+      if (distinctUses.size >= 3) {
+        return pass(`Anti-proliferation verified: procedure has ${distinctUses.size} distinct verified uses`);
+      }
+      return fail(`Anti-proliferation violation: procedure has ${distinctUses.size} distinct verified uses; minimum 3 required`);
     }
     return fail('Anti-proliferation violation: no SkillPackage artifact found to verify uses');
   }

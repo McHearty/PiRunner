@@ -23,7 +23,9 @@ export class FileEventStore {
       try {
         const event: WorkflowEvent = JSON.parse(line);
         this.events.push(Object.freeze(event));
-      } catch {}
+      } catch (e) {
+        throw new Error(`Malformed event journal line: ${line.substring(0, 100)}...`);
+      }
     }
   }
 
