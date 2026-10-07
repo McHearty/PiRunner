@@ -50,7 +50,7 @@ describe('RealDeterministicTestRunner (Authoritative Scoping §28, §31)', () =>
       repositoryRevision: 'local-head',
       dependencyLockHash: 'local-lock',
       executionCommand: 'npm test'
-    })).rejects.toThrow(/Accepted TestSpecification \[non-existent-spec\] not found in store/);
+    })).rejects.toThrow(/TestSpecification \[non-existent-spec\] not found in store/);
   });
 
   it('hashes real test files strictly within declared testRootPaths and executes', async () => {

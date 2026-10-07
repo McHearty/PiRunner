@@ -77,7 +77,7 @@ export const TRANSITION_REGISTRY: TransitionDefinition[] = [
 
   // §35 Review Path
   { id: 'T-070', from: 'COMMIT_CREATED', to: 'REVIEW', guards: [g('G-ART-050'), g('G-TEST-016')], sideEffects: [{ id: 'SE-EVT-070', description: 'REVIEW_STARTED' }], humanApproval: 'NEVER' },
-  { id: 'T-071', from: 'REVIEW', to: 'SPRINT_ACCEPTED', guards: [g('G-ART-051'), g('G-TEST-019')], sideEffects: [{ id: 'SE-EVT-071', description: 'SPRINT_ACCEPTED' }], humanApproval: 'NEVER' },
+  { id: 'T-071', from: 'REVIEW', to: 'SPRINT_ACCEPTED', guards: [g('G-ART-051'), g('G-TEST-016')], sideEffects: [{ id: 'SE-EVT-071', description: 'SPRINT_ACCEPTED' }], humanApproval: 'NEVER' },
   { id: 'T-072', from: 'REVIEW', to: 'REWORK', guards: [g('G-ART-055')], sideEffects: [{ id: 'SE-EVT-072', description: 'REWORK_REQUESTED' }], humanApproval: 'NEVER' },
   { id: 'T-073', from: 'REVIEW', to: 'TRIAGE', guards: [g('G-ART-056')], sideEffects: [{ id: 'SE-EVT-073', description: 'REVIEW_BLOCKED' }], humanApproval: 'NEVER' },
   { id: 'T-074', from: 'REVIEW', to: 'HUMAN_GATE', guards: [g('G-CFG-005')], sideEffects: [{ id: 'SE-EVT-074', description: 'REWORK_LIMIT_EXCEEDED' }], humanApproval: 'ON_LIMIT_EXCEEDED' },

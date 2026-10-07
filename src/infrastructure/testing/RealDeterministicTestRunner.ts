@@ -13,10 +13,17 @@ export class RealDeterministicTestRunner implements TestRunner {
 
   public async execute(request: TestExecutionRequest): Promise<TestExecutionResultData> {
     // 1. Resolve authoritative metadata strictly from accepted TestSpecification (§28, §31) - FAIL CLOSED
-    const specPayload = this.resolveAuthoritativeSpecPayload(request.testSpecificationArtifactId);
+    const specPayload = this.resolveAuthoritativeSpecPayload(request.testSpecificationArtifactId, request.workflowId);
     const testRoots: string[] = specPayload.testRootPaths;
-    const testFramework: string = specPayload.testFramework || 'vitest';
-    const authoritativeCommand: string = specPayload.executionCommand || 'npm test';
+    const testFramework: string = specPayload.testFramework;
+    const authoritativeCommand: string = specPayload.executionCommand;
+
+    if (!testFramework) {
+      throw new Error(`Cannot execute authoritative tests: TestSpecification does not define testFramework`);
+    }
+    if (!authoritativeCommand) {
+      throw new Error(`Cannot execute authoritative tests: TestSpecification does not define executionCommand`);
+    }
 
     // Verify caller executionCommand does not contradict accepted specification
     if (request.executionCommand && request.executionCommand !== authoritativeCommand) {
@@ -78,13 +85,22 @@ export class RealDeterministicTestRunner implements TestRunner {
     };
   }
 
-  private resolveAuthoritativeSpecPayload(specArtifactId: string): any {
+  private resolveAuthoritativeSpecPayload(specArtifactId: string, workflowId?: string): any {
     if (!this.artifactStore) {
       throw new Error(`Cannot execute authoritative tests: ArtifactStore unavailable to resolve TestSpecification [${specArtifactId}]`);
     }
     const spec = this.artifactStore.get(specArtifactId);
     if (!spec) {
-      throw new Error(`Cannot execute authoritative tests: Accepted TestSpecification [${specArtifactId}] not found in store`);
+      throw new Error(`Cannot execute authoritative tests: TestSpecification [${specArtifactId}] not found in store`);
+    }
+    if (spec.status !== 'ACCEPTED') {
+      throw new Error(`Cannot execute authoritative tests: TestSpecification [${specArtifactId}] status is ${spec.status}, must be ACCEPTED`);
+    }
+    if (spec.artifactType !== 'TestSpecification') {
+      throw new Error(`Cannot execute authoritative tests: [${specArtifactId}] is not a TestSpecification (type: ${spec.artifactType})`);
+    }
+    if (workflowId && spec.workflowId !== workflowId) {
+      throw new Error(`Cannot execute authoritative tests: TestSpecification [${specArtifactId}] workflowId ${spec.workflowId} does not match request workflowId ${workflowId}`);
     }
     const payload: any = spec.payload;
     if (!Array.isArray(payload?.testRootPaths) || payload.testRootPaths.length === 0) {
