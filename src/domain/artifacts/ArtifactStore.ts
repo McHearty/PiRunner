@@ -40,10 +40,14 @@ export class ArtifactStore {
     return this.artifacts.get(artifactId) as StoredArtifact<T> | undefined;
   }
 
-  public getByType<T = any>(artifactType: string): StoredArtifact<T>[] {
-    return Array.from(this.artifacts.values()).filter(
+  public getByType<T = any>(artifactType: string, workflowId?: string): StoredArtifact<T>[] {
+    let artifacts = Array.from(this.artifacts.values()).filter(
       a => a.artifactType === artifactType
     ) as StoredArtifact<T>[];
+    if (workflowId) {
+      artifacts = artifacts.filter(a => a.workflowId === workflowId);
+    }
+    return artifacts;
   }
 
   /**

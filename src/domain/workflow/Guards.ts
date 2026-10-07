@@ -16,9 +16,10 @@ export interface RepositorySnapshot {
 export interface GuardContext {
   currentState: WorkflowState;
   targetState: WorkflowState;
+  workflowId: string;
   artifacts: {
     get<T = any>(artifactId: string): StoredArtifact<T> | undefined;
-    getByType<T = any>(artifactType: string): StoredArtifact<T>[];
+    getByType<T = any>(artifactType: string, workflowId?: string): StoredArtifact<T>[];
     getLatestAccepted<T = any>(artifactType: string, workflowId?: string): StoredArtifact<T> | undefined;
   };
   eventHistory: readonly WorkflowEvent[];
@@ -341,14 +342,15 @@ export const GUARDS: Record<string, GuardDefinition> = {
   },
   'G-ART-026': {
     id: 'G-ART-026',
-    description: 'Either accepted MasterSpecification exists, or SprintSpecification is explicitly marked as surgical/no-governing-spec',
+    description: 'Either accepted MasterSpecification exists (workflow-scoped), or SprintSpecification is explicitly marked as surgical/no-governing-spec (workflow-scoped)',
     evaluate: (ctx) => {
-      // Check for accepted MasterSpecification first
-      const spec = ctx.artifacts.getLatestAccepted('MasterSpecification');
-      if (spec) return pass('Accepted MasterSpecification exists');
+      // Check for accepted MasterSpecification (workflow-scoped)
+      const spec = ctx.artifacts.getLatestAccepted('MasterSpecification', ctx.workflowId);
+      if (spec) return pass('Accepted MasterSpecification exists for this workflow');
 
-      // No MasterSpecification — check if SprintSpecification is marked as surgical
-      const sprint = ctx.artifacts.getByType('SprintSpecification').find(a => a.status === 'ACCEPTED' || a.status === 'SUBMITTED');
+      // No MasterSpecification — check if SprintSpecification is marked as surgical (workflow-scoped)
+      const sprints = ctx.artifacts.getByType('SprintSpecification', ctx.workflowId);
+      const sprint = sprints.find(a => a.status === 'ACCEPTED' || a.status === 'SUBMITTED');
       if (sprint) {
         const payload = sprint.payload as any;
         if (payload.surgicalChange === true || payload.noGoverningSpec === true) {
