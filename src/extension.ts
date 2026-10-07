@@ -768,32 +768,36 @@ You have ZERO state transition authority. Transitions are strictly governed by P
           let transitionTarget = target;
 
           // Explicit HITM decision gates for review states
-          if (currentState === 'SKILL_SYNTHESIS') {
-            // Publication decision gate
+          if (target === 'CONCEPT_REVIEW') {
+            // Concept review decision gate (T-010 vs T-012)
+            const accept = await ctx.ui.confirm(
+              'Concept Review Decision',
+              'Visionary Architect completed the Concept Package.\n\nAccept the concept and advance to CONCEPT_REVIEW?\n\nYes = Accept | No = Reject / unresolved'
+            );
+            if (!accept) {
+              transitionTarget = 'HUMAN_GATE';  // T-012
+            }
+            confirmed = true;
+          } else if (target === 'SPECIFICATION_REVIEW') {
+            // Specification review decision gate (T-020 vs T-022)
+            const accept = await ctx.ui.confirm(
+              'MasterSpecification Review Decision',
+              'Architect completed the MasterSpecification.\n\nAccept the specification and advance to SPECIFICATION_REVIEW?\n\nYes = Accept | No = Reject / unresolved'
+            );
+            if (!accept) {
+              transitionTarget = 'HUMAN_GATE';  // T-022
+            }
+            confirmed = true;
+          } else if (currentState === 'SKILL_SYNTHESIS' && target === 'PLANNING') {
+            // Publication decision gate (T-095 vs T-094)
             const publish = await ctx.ui.confirm(
               'Skill Publication Decision',
               'The skill has been synthesized and accepted.\n\nPackage and publish the skill for broader use?\n\nYes = Publish | No = Keep local'
             );
-            transitionTarget = publish ? 'PUBLISHED' : 'PLANNING';
-            confirmed = true;
-          } else if (currentState === 'CONCEPT_REVIEW') {
-            // Concept review decision gate
-            const accept = await ctx.ui.confirm(
-              'Concept Review Decision',
-              'Visionary Architect completed the Concept Package.\n\nAccept the concept and advance to MasterSpecification authoring?\n\nYes = Accept | No = Reject / unresolved'
-            );
-            if (!accept) {
-              transitionTarget = 'HUMAN_GATE';
-            }
-            confirmed = true;
-          } else if (currentState === 'SPECIFICATION_REVIEW') {
-            // Specification review decision gate
-            const accept = await ctx.ui.confirm(
-              'MasterSpecification Review Decision',
-              'Architect completed the MasterSpecification.\n\nAccept the specification and advance to Planning?\n\nYes = Accept | No = Reject / unresolved'
-            );
-            if (!accept) {
-              transitionTarget = 'HUMAN_GATE';
+            if (!publish) {
+              transitionTarget = 'PLANNING';  // Keep local
+            } else {
+              transitionTarget = 'PUBLICATION_READY';  // T-095: publish
             }
             confirmed = true;
           } else {

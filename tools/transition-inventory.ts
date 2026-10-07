@@ -113,10 +113,10 @@ function hasExplicitHitmUi(from: string): boolean {
   // Escape regex special characters
   const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const patterns = [
-    new RegExp(`state === ['"]${escaped}['"].*choose`, 'i'),
-    new RegExp(`state === ['"]${escaped}['"].*confirm`, 'i'),
-    new RegExp(`state === ['"]${escaped}['"].*select`, 'i'),
-    new RegExp(`state === ['"]${escaped}['"].*prompt`, 'i'),
+    new RegExp(`(?:state|currentState|target) === ['"]${escaped}['"].*[\\s\\S]*choose`, 'i'),
+    new RegExp(`(?:state|currentState|target) === ['"]${escaped}['"].*[\\s\\S]*confirm`, 'i'),
+    new RegExp(`(?:state|currentState|target) === ['"]${escaped}['"].*[\\s\\S]*select`, 'i'),
+    new RegExp(`(?:state|currentState|target) === ['"]${escaped}['"].*[\\s\\S]*prompt`, 'i'),
     new RegExp(`getTargetTransitionForArtifact\\([^)]*${escaped}`, 'i')
   ];
   return patterns.some(p => p.test(extSource));
