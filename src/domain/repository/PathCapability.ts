@@ -37,7 +37,8 @@ export class PathCapabilityEnforcer {
       }
     } catch {}
 
-    return 'CONCEPT';
+    // Fail-closed: unknown identity → authorization failure
+    throw new Error(`Unknown agent identity in PathCapabilityEnforcer: ${agentId}`);
   }
 
   public static getPolicy(agentIdOrRole: string): AgentPathPolicy {

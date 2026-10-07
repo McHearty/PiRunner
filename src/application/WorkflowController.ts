@@ -196,6 +196,7 @@ export class WorkflowController {
   }
 
   private resolveAgentRole(agentId: string): CanonicalRole {
+    // Check if it's a canonical role name (HUMAN, SYSTEM, etc.)
     const roles: CanonicalRole[] = [
       'CONCEPT', 'SPECIFICATION', 'PLANNING', 'KNOWLEDGE',
       'TEST_AUTHORING', 'IMPLEMENTATION', 'TRIAGE', 'REVIEW',
@@ -205,6 +206,7 @@ export class WorkflowController {
       return agentId as CanonicalRole;
     }
 
+    // Look up in roster
     try {
       const roster = AgentRosterService.getOrGenerateRoster(this.workspaceRoot);
       for (const entry of Object.values(roster)) {
@@ -212,13 +214,19 @@ export class WorkflowController {
       }
     } catch {}
 
+    // Legacy ID map (for backward compatibility)
     const legacyMap: Record<string, CanonicalRole> = {
       '0012': 'CONCEPT', '0024': 'SPECIFICATION', '0036': 'PLANNING',
       '0048': 'KNOWLEDGE', '0060': 'IMPLEMENTATION', '0072': 'TRIAGE',
       '0084': 'REVIEW', '0096': 'DEVLOG', '0108': 'PUBLICATION',
       '0120': 'TEST_AUTHORING', '0132': 'SKILL_ARCHITECT'
     };
-    return legacyMap[agentId] || 'CONCEPT';
+    if (legacyMap[agentId]) {
+      return legacyMap[agentId];
+    }
+
+    // Fail-closed: unknown agent identity → authorization failure
+    throw new Error(`Unknown agent identity: ${agentId}`);
   }
 
   public executeAuthoritativeTests(request: Omit<TestExecutionRequest, 'workflowId'>): Promise<TestExecutionResultData> {

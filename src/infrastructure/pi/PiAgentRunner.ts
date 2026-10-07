@@ -45,7 +45,12 @@ export class PiAgentRunner implements AgentRunner {
 
     if (toolName === 'write' || toolName === 'edit') {
       const filePath = (payload.path || payload.filePath || '') as string;
-      return PathCapabilityEnforcer.isWriteAllowed(agentId, filePath);
+      try {
+        return PathCapabilityEnforcer.isWriteAllowed(agentId, filePath);
+      } catch (err) {
+        // Unknown agent identity → deny
+        return false;
+      }
     }
 
     if (toolName === 'bash' || toolName === 'exec' || toolName === 'shell') {
@@ -59,9 +64,17 @@ export class PiAgentRunner implements AgentRunner {
       ) {
         return false;
       }
+      return true;
     }
 
-    return true;
+    // Fail-closed: only allow known read-only tools
+    const allowedReadOnlyTools = ['read', 'grep', 'ls', 'cat', 'head', 'tail', 'pwd', 'find', 'which'];
+    if (allowedReadOnlyTools.includes(toolName)) {
+      return true;
+    }
+
+    // Unknown tool → deny (fail-closed)
+    return false;
   }
 
   public async start(invocation: AgentInvocation): Promise<AgentExecution> {
