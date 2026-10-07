@@ -72,12 +72,12 @@ export const HITM_DECISION_REGISTRY: HITMDecision[] = [
     ]
   },
   {
-    transitionIds: ['T-095', 'T-094'],
+    transitionIds: ['T-095', 'T-097'],
     decisionName: 'Skill Publication Decision',
     state: 'SKILL_SYNTHESIS',
     choices: [
       { id: 'publish', label: 'Publish skill', targetTransition: 'T-095' },
-      { id: 'keep_local', label: 'Keep local', targetTransition: 'T-094' }
+      { id: 'keep_local', label: 'Keep local', targetTransition: 'T-097' }
     ]
   },
   {

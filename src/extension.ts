@@ -275,8 +275,8 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     if (state === 'TEST_AUTHORING' && artifactType === 'TestSpecification') return 'TEST_READY';
     if (state === 'IMPLEMENTATION' && artifactType === 'ImplementationResult') return 'COMMIT_CREATED';
     if (state === 'SKILL_SYNTHESIS' && artifactType === 'SkillPackage') return 'PLANNING';
-    if (state === 'DIARY' && artifactType === 'DailyDevlog') return 'DIARY';  // Triggers Diary Decision UI
     // PLANNING → SKILL_SYNTHESIS is handled via task catalog, not artifact completion
+    // DIARY → decisions handled in artifact completion flow, not here
     return null;
   }
 
@@ -751,6 +751,26 @@ You have ZERO state transition authority. Transitions are strictly governed by P
 
 
 
+        // Diary Decision: present decision first, then route to legal transition
+        if (currentState === 'DIARY' && expectedType === 'DailyDevlog') {
+          const diaryChoice = await ctx.ui.select(
+            'Diary Decision',
+            'DailyDevlog completed.\n\nHow would you like to proceed?',
+            [
+              { id: 'publish', label: 'Publish devlog', detail: 'Advance to publication workflow' },
+              { id: 'skill', label: 'Skill synthesis', detail: 'Identify reusable patterns from this devlog' },
+              { id: 'complete', label: 'Complete/skip', detail: 'Finish the devlog and continue' }
+            ]
+          );
+          if (diaryChoice === 'publish') {
+            target = 'PUBLICATION_READY';  // T-091
+          } else if (diaryChoice === 'skill') {
+            target = 'SKILL_SYNTHESIS';  // T-094
+          } else {
+            target = 'PUBLISHED';  // T-092 (complete without publication)
+          }
+        }
+
         // Planning Intent Gate: if PLANNING → SPRINT_READY and no MasterSpecification,
         // present the intent gate before proceeding.
         if (currentState === 'PLANNING' && target === 'SPRINT_READY') {
@@ -824,25 +844,6 @@ You have ZERO state transition authority. Transitions are strictly governed by P
                   await controller.transition('PLANNING', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
                 } else {
                   await controller.transition('HUMAN_GATE', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
-                }
-              } else if (transitionTarget === 'DIARY') {
-                // Diary decision: publish, skill synthesis, or complete
-                const diaryChoice = await ctx.ui.select(
-                  'Diary Decision',
-                  'DailyDevlog completed.\n\nHow would you like to proceed?',
-                  [
-                    { id: 'publish', label: 'Publish devlog', detail: 'Advance to publication workflow' },
-                    { id: 'skill', label: 'Skill synthesis', detail: 'Identify reusable patterns from this devlog' },
-                    { id: 'complete', label: 'Complete/skip', detail: 'Finish the devlog and continue' }
-                  ]
-                );
-                if (diaryChoice === 'publish') {
-                  await controller.transition('PUBLICATION_READY', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
-                } else if (diaryChoice === 'skill') {
-                  await controller.transition('SKILL_SYNTHESIS', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
-                } else {
-                  // Complete/skip: advance to SPRINT_READY
-                  await controller.transition('SPRINT_READY', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
                 }
               }
 

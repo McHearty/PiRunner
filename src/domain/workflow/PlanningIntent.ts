@@ -63,11 +63,15 @@ export async function promptPlanningIntentGate(
 
   if (choice === 'surgical') {
     // Persist surgical intent as canonical event
+    const sequence = eventStore.getNextSequence(workflowId);
     eventStore.append({
+      eventId: `evt-${workflowId}-${sequence}`,
       workflowId: workflowId,
+      sequence: sequence,
       type: 'PLANNING_INTENT_ESTABLISHED',
       actorType: 'HUMAN',
       actorId: 'lead',
+      timestamp: new Date().toISOString(),
       stateBefore: 'PLANNING' as any,
       stateAfter: 'PLANNING' as any,
       artifactIds: [sprintSpec.artifactId],
