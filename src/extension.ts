@@ -275,6 +275,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     if (state === 'TEST_AUTHORING' && artifactType === 'TestSpecification') return 'TEST_READY';
     if (state === 'IMPLEMENTATION' && artifactType === 'ImplementationResult') return 'COMMIT_CREATED';
     if (state === 'SKILL_SYNTHESIS' && artifactType === 'SkillPackage') return 'PLANNING';
+    // PLANNING → SKILL_SYNTHESIS is handled via task catalog, not artifact completion
     return null;
   }
 
@@ -763,21 +764,83 @@ You have ZERO state transition authority. Transitions are strictly governed by P
         }
 
         if (target) {
-          const confirmed = await ctx.ui.confirm(
-            'HITM Step Authorization',
-            `${AgentRosterService.formatBadge(currentAgent)} completed ${expectedType}.\nAuthorize transition from [${currentState}] to [${target}]?`
-          );
+          let confirmed = false;
+          let transitionTarget = target;
+
+          // Explicit HITM decision gates for review states
+          if (currentState === 'SKILL_SYNTHESIS') {
+            // Publication decision gate
+            const publish = await ctx.ui.confirm(
+              'Skill Publication Decision',
+              'The skill has been synthesized and accepted.\n\nPackage and publish the skill for broader use?\n\nYes = Publish | No = Keep local'
+            );
+            transitionTarget = publish ? 'PUBLISHED' : 'PLANNING';
+            confirmed = true;
+          } else if (currentState === 'CONCEPT_REVIEW') {
+            // Concept review decision gate
+            const accept = await ctx.ui.confirm(
+              'Concept Review Decision',
+              'Visionary Architect completed the Concept Package.\n\nAccept the concept and advance to MasterSpecification authoring?\n\nYes = Accept | No = Reject / unresolved'
+            );
+            if (!accept) {
+              transitionTarget = 'HUMAN_GATE';
+            }
+            confirmed = true;
+          } else if (currentState === 'SPECIFICATION_REVIEW') {
+            // Specification review decision gate
+            const accept = await ctx.ui.confirm(
+              'MasterSpecification Review Decision',
+              'Architect completed the MasterSpecification.\n\nAccept the specification and advance to Planning?\n\nYes = Accept | No = Reject / unresolved'
+            );
+            if (!accept) {
+              transitionTarget = 'HUMAN_GATE';
+            }
+            confirmed = true;
+          } else {
+            confirmed = await ctx.ui.confirm(
+              'HITM Step Authorization',
+              `${AgentRosterService.formatBadge(currentAgent)} completed ${expectedType}.\nAuthorize transition from [${currentState}] to [${transitionTarget}]?`
+            );
+          }
           if (confirmed) {
             try {
-              await controller.transition(target, { actorType: 'AGENT', actorId: currentAgent.id }, {
+              await controller.transition(transitionTarget, { actorType: 'AGENT', actorId: currentAgent.id }, {
                 humanApproved: true,
                 artifactIds: [ingestion.artifact.artifactId]
               });
 
               // Automatic advancement from control states to next work state.
               // SPRINT_READY has no active agent; advance to TEST_AUTHORING via T-040.
+              // PUSH_GATE requires human decision; present explicit UI.
               while (CONTROL_STATES.has(controller.getState())) {
-                const autoTarget = getTargetTransitionForControlState(controller.getState());
+                const state = controller.getState();
+                if (state === 'PUSH_GATE') {
+                  // Push decision gate: push or not?
+                  const push = await ctx.ui.confirm(
+                    'Push Decision Gate',
+                    'Sprint changes are committed locally.\n\nPush to remote repository?\n\nYes = Push | No = Hold locally'
+                  );
+                  if (push) {
+                    await controller.transition('REMOTE_PUBLISHED', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                  } else {
+                    await controller.transition('HUMAN_GATE', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                  }
+                  break;
+                }
+                if (state === 'SPRINT_COMPLETE') {
+                  // Sprint complete decision: next sprint or end day?
+                  const nextSprint = await ctx.ui.confirm(
+                    'Sprint Complete Decision',
+                    'The sprint has been completed and published.\n\nBegin the next sprint?\n\nYes = Begin next sprint | No = End workday'
+                  );
+                  if (nextSprint) {
+                    await controller.transition('SPRINT_READY', { actorType: 'HUMAN', actorId: 'lead' });
+                  } else {
+                    await controller.transition('DAY_COMPLETE', { actorType: 'HUMAN', actorId: 'lead' });
+                  }
+                  break;
+                }
+                const autoTarget = getTargetTransitionForControlState(state);
                 if (!autoTarget) break;
                 await controller.transition(autoTarget, { actorType: 'SYSTEM', actorId: '0000' });
                 ctx.ui.notify(`Auto-advanced to [${controller.getState()}]`, 'info');

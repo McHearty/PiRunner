@@ -15,7 +15,8 @@ export const AGENT_TASK_CATALOG: Record<CanonicalRole, string[]> = {
   PLANNING: [
     'Decompose MasterSpecification into ordered sprint tasks',
     'Formulate SprintSpecification and DailyPlan artifacts',
-    'Identify required knowledge keys and dependency prerequisites'
+    'Identify required knowledge keys and dependency prerequisites',
+    'Curate and synthesize a reusable agent skill from recurring workflow patterns'
   ],
   KNOWLEDGE: [
     'Discover changed files and compute incremental knowledge delta',
