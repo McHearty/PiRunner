@@ -1,11 +1,11 @@
 {
-  "generated": "2026-10-07T08:19:48.757Z",
+  "generated": "2026-10-07T09:13:11.451Z",
   "summary": {
-    "totalTransitions": 65,
+    "totalTransitions": 66,
     "automatic": 44,
     "agentCompletion": 5,
-    "humanDecision": 16,
-    "explicitHitmUi": 14,
+    "humanDecision": 17,
+    "explicitHitmUi": 15,
     "genericCommandOnly": 2,
     "withIssues": 23
   },
@@ -559,7 +559,7 @@
       "humanApproval": "NEVER",
       "guards": [
         "G-ART-051",
-        "G-TEST-019"
+        "G-TEST-016"
       ],
       "triggerCategory": "AUTOMATIC",
       "uiExposure": [
@@ -758,6 +758,21 @@
       "guards": [
         "G-ART-072",
         "G-HUMAN-002"
+      ],
+      "triggerCategory": "HUMAN_DECISION_GATE",
+      "uiExposure": [
+        "CONTROL_AUTO",
+        "EXPLICIT_HITM_UI"
+      ],
+      "issues": []
+    },
+    {
+      "id": "T-098",
+      "from": "PUBLICATION_READY",
+      "to": "HUMAN_GATE",
+      "humanApproval": "ALWAYS",
+      "guards": [
+        "G-CFG-006"
       ],
       "triggerCategory": "HUMAN_DECISION_GATE",
       "uiExposure": [

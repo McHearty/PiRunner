@@ -81,12 +81,12 @@ export const HITM_DECISION_REGISTRY: HITMDecision[] = [
     ]
   },
   {
-    transitionIds: ['T-093'],
+    transitionIds: ['T-093', 'T-098'],
     decisionName: 'Publication Decision Gate',
     state: 'PUBLICATION_READY',
     choices: [
       { id: 'publish', label: 'Publish release', targetTransition: 'T-093' },
-      { id: 'hold', label: 'Hold' }
+      { id: 'hold', label: 'Hold', targetTransition: 'T-098' }
     ]
   },
   {
@@ -113,3 +113,33 @@ export const EXCEPTIONAL_TRANSITIONS = new Set([
   'T-103B',  // REPOSITORY_CONFLICT → STATE_VALIDATION (recovery)
   'T-103C'   // REPOSITORY_CONFLICT → KNOWLEDGE_SYNC (recovery)
 ]);
+
+/**
+ * Lookup: get the decision entry for a given state.
+ * Returns null if no decision is registered for that state.
+ */
+export function getDecisionForState(state: string): HITMDecision | null {
+  return HITM_DECISION_REGISTRY.find(d => d.state === state) || null;
+}
+
+/**
+ * Lookup: get the transition ID for a given decision and choice.
+ * Returns null if the choice has no target transition (e.g., "continue").
+ */
+export function getTransitionForChoice(decisionName: string, choiceId: string): string | null {
+  const decision = HITM_DECISION_REGISTRY.find(d => d.decisionName === decisionName);
+  if (!decision) return null;
+  const choice = decision.choices.find(c => c.id === choiceId);
+  if (!choice) return null;
+  return choice.targetTransition || null;
+}
+
+/**
+ * Lookup: get the choice IDs for a given decision.
+ * Returns empty array if decision not found.
+ */
+export function getChoicesForDecision(decisionName: string): { id: string; label: string }[] {
+  const decision = HITM_DECISION_REGISTRY.find(d => d.decisionName === decisionName);
+  if (!decision) return [];
+  return decision.choices.map(c => ({ id: c.id, label: c.label }));
+}

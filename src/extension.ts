@@ -26,6 +26,7 @@ import { PathCapabilityEnforcer } from './domain/repository/PathCapability.js';
 import { ARTIFACT_SKELETONS } from './domain/artifacts/ArtifactSkeletons.js';
 import { WorkflowIdentityService, WorkflowIdentity } from './domain/workflow/WorkflowIdentity.js';
 import { promptPlanningIntentGate } from './domain/workflow/PlanningIntent.js';
+import { getTransitionForChoice } from './domain/workflow/HITMDecisionRegistry.js';
 
 export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   const root = process.cwd();
@@ -765,26 +766,25 @@ You have ZERO state transition authority. Transitions are strictly governed by P
               { id: 'complete', label: 'Complete/skip', detail: 'Finish the devlog and continue' }
             ]
           );
-          if (diaryChoice === 'publish') {
-            target = 'PUBLICATION_READY';  // T-091
-          } else if (diaryChoice === 'skill') {
-            target = 'SKILL_SYNTHESIS';  // T-094
-          } else {
-            target = 'PUBLISHED';  // T-092 (complete without publication)
-          }
+          const transitionId = getTransitionForChoice('Diary Decision', diaryChoice);
+          if (transitionId === 'T-091') target = 'PUBLICATION_READY';
+          else if (transitionId === 'T-094') target = 'SKILL_SYNTHESIS';
+          else target = 'PUBLISHED';  // T-092 (complete without publication)
         }
 
         // Planning Intent Gate: if PLANNING → SPRINT_READY and no MasterSpecification,
         // present the intent gate before proceeding.
         if (currentState === 'PLANNING' && target === 'SPRINT_READY') {
           const intentResult = await promptPlanningIntentGate(ctx.ui, artifactStore, eventStore, workflowId, ingestion.artifact);
-          if (intentResult.action === 'specification') {
+          const specTransitionId = getTransitionForChoice('Planning Intent Gate', 'specification');
+          if (intentResult.action === 'specification' && specTransitionId === 'T-035') {
             target = 'SPECIFICATION';  // T-035
           } else if (intentResult.action === 'continue') {
             ctx.ui.notify('Returning to planning discussion.', 'info');
             return;
           } else if (intentResult.action === 'skill_curation') {
-            target = 'SKILL_SYNTHESIS';  // T-096
+            const skillTransitionId = getTransitionForChoice('Planning Intent Gate', 'skill_curation');
+            if (skillTransitionId === 'T-096') target = 'SKILL_SYNTHESIS';
           }
           // 'surgical' action: intent persisted as canonical event; proceed to SPRINT_READY
         }
@@ -801,15 +801,17 @@ You have ZERO state transition authority. Transitions are strictly governed by P
               `Transition to [${target}] for human review?`
             );
           } else if (currentState === 'SKILL_SYNTHESIS' && target === 'PLANNING') {
-            // Publication decision gate (T-095 vs T-094)
+            // Publication decision gate
             const publish = await ctx.ui.confirm(
               'Skill Publication Decision',
               'The skill has been synthesized and accepted.\n\nPackage and publish the skill for broader use?\n\nYes = Publish | No = Keep local'
             );
+            const publishTransitionId = getTransitionForChoice('Skill Publication Decision', 'publish');
+            const localTransitionId = getTransitionForChoice('Skill Publication Decision', 'keep_local');
             if (!publish) {
-              transitionTarget = 'PLANNING';  // Keep local
+              if (localTransitionId === 'T-097') transitionTarget = 'PLANNING';  // Keep local
             } else {
-              transitionTarget = 'PUBLICATION_READY';  // T-095: publish
+              if (publishTransitionId === 'T-095') transitionTarget = 'PUBLICATION_READY';  // Publish
             }
             confirmed = true;
           } else {
@@ -827,26 +829,38 @@ You have ZERO state transition authority. Transitions are strictly governed by P
 
               // Review state decisions: presented after entering review state
               if (transitionTarget === 'CONCEPT_REVIEW') {
-                // Concept review decision (T-011 vs T-012)
+                // Concept review decision
                 const accept = await ctx.ui.confirm(
                   'Concept Review Decision',
                   'Concept Package submitted for review.\n\nAccept and advance to Specification authoring?\n\nYes = Accept | No = Reject / unresolved'
                 );
                 if (accept) {
-                  await controller.transition('SPECIFICATION', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                  const acceptTransitionId = getTransitionForChoice('Concept Review Decision', 'accept');
+                  if (acceptTransitionId === 'T-011') {
+                    await controller.transition('SPECIFICATION', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                  }
                 } else {
-                  await controller.transition('HUMAN_GATE', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                  const rejectTransitionId = getTransitionForChoice('Concept Review Decision', 'reject');
+                  if (rejectTransitionId === 'T-012') {
+                    await controller.transition('HUMAN_GATE', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                  }
                 }
               } else if (transitionTarget === 'SPECIFICATION_REVIEW') {
-                // Specification review decision (T-021 vs T-022)
+                // Specification review decision
                 const accept = await ctx.ui.confirm(
                   'MasterSpecification Review Decision',
                   'MasterSpecification submitted for review.\n\nAccept and advance to Planning?\n\nYes = Accept | No = Reject / unresolved'
                 );
                 if (accept) {
-                  await controller.transition('PLANNING', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                  const acceptTransitionId = getTransitionForChoice('Specification Review Decision', 'accept');
+                  if (acceptTransitionId === 'T-021') {
+                    await controller.transition('PLANNING', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                  }
                 } else {
-                  await controller.transition('HUMAN_GATE', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                  const rejectTransitionId = getTransitionForChoice('Specification Review Decision', 'reject');
+                  if (rejectTransitionId === 'T-022') {
+                    await controller.transition('HUMAN_GATE', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                  }
                 }
               }
 
@@ -856,15 +870,21 @@ You have ZERO state transition authority. Transitions are strictly governed by P
               while (CONTROL_STATES.has(controller.getState())) {
                 const state = controller.getState();
                 if (state === 'PUBLICATION_READY') {
-                  // Publication decision gate (T-093)
+                  // Publication decision gate
                   const publish = await ctx.ui.confirm(
                     'Publication Decision Gate',
                     'The sprint work is ready for publication.\n\nPublish the release?\n\nYes = Publish | No = Hold'
                   );
+                  const publishTransitionId = getTransitionForChoice('Publication Decision Gate', 'publish');
+                  const holdTransitionId = getTransitionForChoice('Publication Decision Gate', 'hold');
                   if (publish) {
-                    await controller.transition('PUBLISHED', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                    if (publishTransitionId === 'T-093') {
+                      await controller.transition('PUBLISHED', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                    }
                   } else {
-                    await controller.transition('SPRINT_READY', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                    if (holdTransitionId === 'T-098') {
+                      await controller.transition('HUMAN_GATE', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                    }
                   }
                   break;
                 }
