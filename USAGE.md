@@ -111,7 +111,28 @@ Prompt Pi:
 Audit package-lock.json and active source files to generate the KnowledgeSnapshot.
 ```
 - Ingests `KnowledgeSnapshot` with the live dependency lockfile SHA-256 hash.
-- Automatically advances to `SPRINT_READY`.
+- Automatically advances to `PLANNING` (never skips to `SPRINT_READY`).
+
+---
+
+### Step 3b: Planning Intent Gate (Naturalized HITM Decision)
+When the planning agent produces a `SprintSpecification` and no accepted `MasterSpecification` exists for the current workflow, PiRunner presents an explicit decision dialog:
+
+```
+? Planning Intent Decision
+  No accepted MasterSpecification exists for this workflow.
+
+  How would you like to proceed?
+  - Create/revise MasterSpecification first (governed path)
+  - Declare surgical change (no-governing-spec path)
+  - Continue planning discussion
+```
+
+- **Create/revise MasterSpecification:** Advances to `SPECIFICATION` for architectural design.
+- **Declare surgical change:** Proceeds to `SPRINT_READY` with the SprintSpecification explicitly marked as `noGoverningSpec` (satisfies G-ART-026).
+- **Continue planning:** Returns to planning discussion without transitioning.
+
+This gate ensures that the choice between governed and surgical workflows is an explicit human decision, not an implicit path.
 
 ---
 
@@ -191,18 +212,20 @@ Audit package-lock.json and active source files to generate the KnowledgeSnapsho
 ### Step 7: Push Gate & Remote Publication (`PUSH_GATE`)
 Irreversible remote publication requires explicit human authority.
 
-1. Advance to push gate:
-   ```text
-   /hitm-approve PUSH_GATE
-   ```
-2. Authorize publication:
-   ```text
-   /hitm-approve REMOTE_PUBLISHED
-   ```
-   - Prompts with a native confirmation dialog:
-     `? Authorize transition from [PUSH_GATE] to [REMOTE_PUBLISHED]?`
-   - Pre-push verification confirms clean working tree and expected commit SHA.
-   - Pushes to remote repository and advances to `SPRINT_COMPLETE`.
+When the sprint is accepted and the workflow reaches `PUSH_GATE`, PiRunner presents an explicit decision dialog:
+
+```
+? Push Decision Gate
+  Sprint changes are committed locally.
+
+  Push to remote repository?
+  Yes = Push | No = Hold locally
+```
+
+- **Push to remote:** Advances to `REMOTE_PUBLISHED`, executes pre-push verification, and pushes to the remote repository.
+- **Hold locally:** Advances to `HUMAN_GATE` for further discussion; changes remain local.
+
+The `/hitm-approve PUSH_GATE` and `/hitm-approve REMOTE_PUBLISHED` commands remain available for manual override.
 
 ---
 
@@ -224,7 +247,16 @@ To prevent repository bloat, a procedure graduates into a skill **only after ≥
    Synthesize the recurring test-authoring procedure into a parameterized skill in skills/author-tests.md citing our last 3 sprint uses.
    ```
 3. Guard `G-SKILL-001` verifies that ≥3 uses are documented in `verifiedUses`.
-4. Prompts to return to `PLANNING` (`T-097`) or advance to `PUBLICATION_READY` (`T-095`).
+4. When the skill is accepted, PiRunner presents an explicit publication decision dialog:
+   ```
+   ? Skill Publication Decision
+     The skill has been synthesized and accepted.
+
+     Package and publish the skill for broader use?
+     Yes = Publish | No = Keep local
+   ```
+   - **Publish:** Advances to `PUBLICATION_READY` (`T-095`).
+   - **Keep local:** Returns to `PLANNING` (`T-094`).
 
 ---
 

@@ -34,7 +34,7 @@ PiRunner is explicitly **not** an autonomous multi-agent swarm. Human engineers 
 
 ### Core Invariants
 
-1. **Natural Chat with Automatic HITM Gating:** Chat normally in the Pi terminal. The active agent answers within its governance persona. When a task produces a typed artifact, PiRunner intercepts turn completion and prompts with an interactive confirmation dialog (`ctx.ui.confirm`) to authorize state progression.
+1. **Natural Chat with Explicit HITM Decision Gates:** Chat normally in the Pi terminal. The active agent answers within its governance persona. When a task produces a typed artifact, PiRunner intercepts turn completion and presents an explicit HITM decision dialog (`ctx.ui.confirm` / `ctx.ui.select`) appropriate to the workflow context — accept/reject reviews, push/hold decisions, sprint continuation, skill publication, and planning intent. Each decision is naturally presented at the point where the decision becomes necessary.
 2. **Authoritative Test Authoring Before Implementation:** Acceptance tests are derived exclusively from accepted specifications by the test-authoring specialist before implementation begins. Tests never derive expected behavior from implementation control flow.
 3. **Immutable Test-Suite Locking:** Reaching `TEST_READY` hashes the declared test suite (SHA-256) into `.hitm/test-suite.lock.json`. The implementation agent consumes the suite as a read-only contract and cannot modify tests.
 4. **Deterministic Subprocess Test Execution:** Test results are evaluated by deterministic infrastructure (`RealDeterministicTestRunner`) in an isolated subprocess (`npm test`), never by an LLM self-reporting success.
