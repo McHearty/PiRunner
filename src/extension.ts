@@ -275,6 +275,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
     if (state === 'TEST_AUTHORING' && artifactType === 'TestSpecification') return 'TEST_READY';
     if (state === 'IMPLEMENTATION' && artifactType === 'ImplementationResult') return 'COMMIT_CREATED';
     if (state === 'SKILL_SYNTHESIS' && artifactType === 'SkillPackage') return 'PLANNING';
+    if (state === 'DIARY' && artifactType === 'DailyDevlog') return 'DIARY';  // Triggers Diary Decision UI
     // PLANNING → SKILL_SYNTHESIS is handled via task catalog, not artifact completion
     return null;
   }

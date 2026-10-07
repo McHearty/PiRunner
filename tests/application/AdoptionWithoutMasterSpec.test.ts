@@ -253,7 +253,24 @@ describe('S9-P0-3: Adoption path authority — MasterSpecification or surgical S
     };
     artifactStore.save(sprintSpec);
 
-    // PLANNING → SPRINT_READY should succeed with surgical flag
+    // Persist surgical intent as canonical event (matches production Planning Intent Gate)
+    const currentEvents = eventStore.getEvents('wf-adoption-no-spec');
+    const nextSeq = currentEvents.length;
+    eventStore.append({
+      eventId: `evt-adoption-surgical-intent-${Date.now()}`,
+      workflowId: 'wf-adoption-no-spec',
+      sequence: nextSeq,
+      type: 'PLANNING_INTENT_ESTABLISHED',
+      actorType: 'HUMAN',
+      actorId: 'lead',
+      timestamp: new Date().toISOString(),
+      stateBefore: 'PLANNING' as any,
+      stateAfter: 'PLANNING' as any,
+      artifactIds: ['art-sprint'],
+      metadata: { intent: 'SURGICAL_CHANGE' }
+    });
+
+    // PLANNING → SPRINT_READY should succeed with surgical intent in event history
     await controller.transition('SPRINT_READY', { actorType: 'AGENT', actorId: '0036' }, { humanApproved: true });
     expect(controller.getState()).toBe('SPRINT_READY');
   });

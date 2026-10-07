@@ -352,23 +352,20 @@ export const GUARDS: Record<string, GuardDefinition> = {
   },
   'G-ART-026': {
     id: 'G-ART-026',
-    description: 'Either accepted MasterSpecification exists (workflow-scoped), or SprintSpecification is explicitly marked as surgical/no-governing-spec (workflow-scoped)',
+    description: 'Either accepted MasterSpecification exists (workflow-scoped), or surgical intent declared in workflow event history',
     evaluate: (ctx) => {
       // Check for accepted MasterSpecification (workflow-scoped)
       const spec = ctx.artifacts.getLatestAccepted('MasterSpecification', ctx.workflowId);
       if (spec) return pass('Accepted MasterSpecification exists for this workflow');
 
-      // No MasterSpecification — check if SprintSpecification is marked as surgical (workflow-scoped)
-      const sprints = ctx.artifacts.getByType('SprintSpecification', ctx.workflowId);
-      const sprint = sprints.find(a => a.status === 'ACCEPTED' || a.status === 'SUBMITTED');
-      if (sprint) {
-        const payload = sprint.payload as any;
-        if (payload.surgicalChange === true || payload.noGoverningSpec === true) {
-          return pass('SprintSpecification explicitly marked as surgical/no-governing-spec');
-        }
-      }
+      // No MasterSpecification — check for surgical intent in event history (canonical authority)
+      const intentEvent = ctx.eventHistory.find(e =>
+        e.type === 'PLANNING_INTENT_ESTABLISHED' &&
+        e.metadata?.intent === 'SURGICAL_CHANGE'
+      );
+      if (intentEvent) return pass('Surgical intent declared in workflow event history');
 
-      return fail('No accepted MasterSpecification and SprintSpecification not marked as surgical');
+      return fail('Neither accepted MasterSpecification nor surgical intent declared');
     }
   },
   'G-TEST-001': {
