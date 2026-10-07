@@ -14,21 +14,23 @@
 
 
 export interface PlanningIntentResult {
-  action: 'specification' | 'surgical' | 'continue';
+  action: 'specification' | 'surgical' | 'skill_curation' | 'continue';
   payload?: any;
 }
 
 export async function promptPlanningIntentGate(
   ui: any,
   artifactStore: any,
+  eventStore: any,
+  workflowId: string,
   sprintSpec: any
 ): Promise<PlanningIntentResult> {
-  // Check if MasterSpecification exists
-  const masterSpec = artifactStore.getLatestAccepted('MasterSpecification');
+  // Check if MasterSpecification exists (workflow-scoped)
+  const masterSpec = artifactStore.getLatestAccepted('MasterSpecification', workflowId);
 
   if (masterSpec) {
     // Governing spec exists — proceed normally
-    return { action: 'surgical' }; // Use 'surgical' as "proceed normally"
+    return { action: 'surgical' }; // 'surgical' here means "proceed to SPRINT_READY"
   }
 
   // No governing spec — present intent gate
@@ -47,6 +49,11 @@ export async function promptPlanningIntentGate(
         detail: 'Proceed as a bounded, self-contained change with explicit scope declaration.'
       },
       {
+        id: 'skill_curation',
+        label: 'Curate reusable skill',
+        detail: 'Identify recurring patterns and synthesize a reusable agent skill.'
+      },
+      {
         id: 'continue',
         label: 'Continue planning',
         detail: 'Return to planning discussion without formalizing.'
@@ -55,14 +62,21 @@ export async function promptPlanningIntentGate(
   );
 
   if (choice === 'surgical') {
-    // Mark SprintSpecification as surgical
-    const payload = {
-      ...sprintSpec.payload,
-      surgicalChange: true,
-      noGoverningSpec: true,
-      declaredAt: new Date().toISOString()
-    };
-    return { action: 'surgical', payload };
+    // Persist surgical intent as canonical event
+    eventStore.append({
+      workflowId: workflowId,
+      type: 'PLANNING_INTENT_ESTABLISHED',
+      actorType: 'HUMAN',
+      actorId: 'lead',
+      stateBefore: 'PLANNING' as any,
+      stateAfter: 'PLANNING' as any,
+      artifactIds: [sprintSpec.artifactId],
+      metadata: {
+        intent: 'SURGICAL_CHANGE',
+        declaredAt: new Date().toISOString()
+      }
+    });
+    return { action: 'surgical' };
   }
 
   return { action: choice };

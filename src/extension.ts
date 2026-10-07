@@ -748,46 +748,34 @@ You have ZERO state transition authority. Transitions are strictly governed by P
       if (ingestion.success && ingestion.artifact) {
         let target = getTargetTransitionForArtifact(currentState, expectedType);
 
+
+
         // Planning Intent Gate: if PLANNING → SPRINT_READY and no MasterSpecification,
         // present the intent gate before proceeding.
         if (currentState === 'PLANNING' && target === 'SPRINT_READY') {
-          const intentResult = await promptPlanningIntentGate(ctx.ui, artifactStore, ingestion.artifact);
+          const intentResult = await promptPlanningIntentGate(ctx.ui, artifactStore, eventStore, workflowId, ingestion.artifact);
           if (intentResult.action === 'specification') {
             target = 'SPECIFICATION';  // T-035
           } else if (intentResult.action === 'continue') {
             ctx.ui.notify('Returning to planning discussion.', 'info');
             return;
-          } else if (intentResult.action === 'surgical' && intentResult.payload) {
-            // Re-ingest artifact with surgical flags
-            ingestion.artifact.payload = intentResult.payload;
+          } else if (intentResult.action === 'skill_curation') {
+            target = 'SKILL_SYNTHESIS';  // T-096
           }
+          // 'surgical' action: intent persisted as canonical event; proceed to SPRINT_READY
         }
 
         if (target) {
           let confirmed = false;
           let transitionTarget = target;
 
-          // Explicit HITM decision gates for review states
-          if (target === 'CONCEPT_REVIEW') {
-            // Concept review decision gate (T-010 vs T-012)
-            const accept = await ctx.ui.confirm(
-              'Concept Review Decision',
-              'Visionary Architect completed the Concept Package.\n\nAccept the concept and advance to CONCEPT_REVIEW?\n\nYes = Accept | No = Reject / unresolved'
+          // Review states: transition to review state first, then present decision
+          if (target === 'CONCEPT_REVIEW' || target === 'SPECIFICATION_REVIEW') {
+            // Transition to review state
+            confirmed = await ctx.ui.confirm(
+              'Transition to Review',
+              `Transition to [${target}] for human review?`
             );
-            if (!accept) {
-              transitionTarget = 'HUMAN_GATE';  // T-012
-            }
-            confirmed = true;
-          } else if (target === 'SPECIFICATION_REVIEW') {
-            // Specification review decision gate (T-020 vs T-022)
-            const accept = await ctx.ui.confirm(
-              'MasterSpecification Review Decision',
-              'Architect completed the MasterSpecification.\n\nAccept the specification and advance to SPECIFICATION_REVIEW?\n\nYes = Accept | No = Reject / unresolved'
-            );
-            if (!accept) {
-              transitionTarget = 'HUMAN_GATE';  // T-022
-            }
-            confirmed = true;
           } else if (currentState === 'SKILL_SYNTHESIS' && target === 'PLANNING') {
             // Publication decision gate (T-095 vs T-094)
             const publish = await ctx.ui.confirm(
@@ -813,11 +801,68 @@ You have ZERO state transition authority. Transitions are strictly governed by P
                 artifactIds: [ingestion.artifact.artifactId]
               });
 
+              // Review state decisions: presented after entering review state
+              if (transitionTarget === 'CONCEPT_REVIEW') {
+                // Concept review decision (T-011 vs T-012)
+                const accept = await ctx.ui.confirm(
+                  'Concept Review Decision',
+                  'Concept Package submitted for review.\n\nAccept and advance to Specification authoring?\n\nYes = Accept | No = Reject / unresolved'
+                );
+                if (accept) {
+                  await controller.transition('SPECIFICATION', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                } else {
+                  await controller.transition('HUMAN_GATE', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                }
+              } else if (transitionTarget === 'SPECIFICATION_REVIEW') {
+                // Specification review decision (T-021 vs T-022)
+                const accept = await ctx.ui.confirm(
+                  'MasterSpecification Review Decision',
+                  'MasterSpecification submitted for review.\n\nAccept and advance to Planning?\n\nYes = Accept | No = Reject / unresolved'
+                );
+                if (accept) {
+                  await controller.transition('PLANNING', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                } else {
+                  await controller.transition('HUMAN_GATE', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                }
+              } else if (transitionTarget === 'DIARY') {
+                // Diary decision: publish, skill synthesis, or complete
+                const diaryChoice = await ctx.ui.select(
+                  'Diary Decision',
+                  'DailyDevlog completed.\n\nHow would you like to proceed?',
+                  [
+                    { id: 'publish', label: 'Publish devlog', detail: 'Advance to publication workflow' },
+                    { id: 'skill', label: 'Skill synthesis', detail: 'Identify reusable patterns from this devlog' },
+                    { id: 'complete', label: 'Complete/skip', detail: 'Finish the devlog and continue' }
+                  ]
+                );
+                if (diaryChoice === 'publish') {
+                  await controller.transition('PUBLICATION_READY', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                } else if (diaryChoice === 'skill') {
+                  await controller.transition('SKILL_SYNTHESIS', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                } else {
+                  // Complete/skip: advance to SPRINT_READY
+                  await controller.transition('SPRINT_READY', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                }
+              }
+
               // Automatic advancement from control states to next work state.
               // SPRINT_READY has no active agent; advance to TEST_AUTHORING via T-040.
               // PUSH_GATE requires human decision; present explicit UI.
               while (CONTROL_STATES.has(controller.getState())) {
                 const state = controller.getState();
+                if (state === 'PUBLICATION_READY') {
+                  // Publication decision gate (T-093)
+                  const publish = await ctx.ui.confirm(
+                    'Publication Decision Gate',
+                    'The sprint work is ready for publication.\n\nPublish the release?\n\nYes = Publish | No = Hold'
+                  );
+                  if (publish) {
+                    await controller.transition('PUBLISHED', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                  } else {
+                    await controller.transition('SPRINT_READY', { actorType: 'HUMAN', actorId: 'lead' }, { humanApproved: true });
+                  }
+                  break;
+                }
                 if (state === 'PUSH_GATE') {
                   // Push decision gate: push or not?
                   const push = await ctx.ui.confirm(

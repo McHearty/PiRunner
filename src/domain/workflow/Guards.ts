@@ -334,10 +334,20 @@ export const GUARDS: Record<string, GuardDefinition> = {
   },
   'G-ART-024': {
     id: 'G-ART-024',
-    description: 'Active accepted MasterSpecification exists',
+    description: 'Active accepted MasterSpecification exists OR workflow is explicitly surgical',
     evaluate: (ctx) => {
-      const spec = ctx.artifacts.getLatestAccepted('MasterSpecification');
-      return spec ? pass() : fail('No accepted MasterSpecification exists');
+      // Check for accepted MasterSpecification (workflow-scoped)
+      const spec = ctx.artifacts.getLatestAccepted('MasterSpecification', ctx.workflowId);
+      if (spec) return pass('Accepted MasterSpecification exists');
+
+      // Check for surgical intent in event history
+      const intentEvent = ctx.eventHistory.find(e =>
+        e.type === 'PLANNING_INTENT_ESTABLISHED' &&
+        e.metadata?.intent === 'SURGICAL_CHANGE'
+      );
+      if (intentEvent) return pass('Surgical workflow explicitly declared');
+
+      return fail('No accepted MasterSpecification and no surgical intent declared');
     }
   },
   'G-ART-026': {

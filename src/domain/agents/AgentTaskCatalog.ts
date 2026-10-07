@@ -16,7 +16,7 @@ export const AGENT_TASK_CATALOG: Record<CanonicalRole, string[]> = {
     'Decompose MasterSpecification into ordered sprint tasks',
     'Formulate SprintSpecification and DailyPlan artifacts',
     'Identify required knowledge keys and dependency prerequisites',
-    'Curate and synthesize a reusable agent skill from recurring workflow patterns'
+    'Propose skill curation from recurring workflow patterns'
   ],
   KNOWLEDGE: [
     'Discover changed files and compute incremental knowledge delta',
@@ -51,7 +51,8 @@ export const AGENT_TASK_CATALOG: Record<CanonicalRole, string[]> = {
   SKILL_ARCHITECT: [
     'Audit devlog/event history for procedures with >=3 verified uses',
     'Synthesize and parameterize candidate skill in skills/**',
-    'Emit SkillPackage artifact under anti-proliferation rule'
+    'Emit SkillPackage artifact under anti-proliferation rule',
+    'Curate and synthesize a reusable agent skill from recurring workflow patterns'
   ],
   PUBLICATION: [
     'Formulate release package headline, summary, and channel highlights',

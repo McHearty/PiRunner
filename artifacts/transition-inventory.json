@@ -1,13 +1,13 @@
 {
-  "generated": "2026-10-06T15:39:18.374Z",
+  "generated": "2026-10-07T08:06:29.220Z",
   "summary": {
     "totalTransitions": 65,
     "automatic": 44,
     "agentCompletion": 5,
     "humanDecision": 16,
-    "explicitHitmUi": 0,
-    "genericCommandOnly": 16,
-    "withIssues": 37
+    "explicitHitmUi": 14,
+    "genericCommandOnly": 2,
+    "withIssues": 23
   },
   "transitions": [
     {
@@ -176,11 +176,9 @@
       ],
       "triggerCategory": "HUMAN_DECISION_GATE",
       "uiExposure": [
-        "GENERIC_COMMAND_ONLY"
+        "EXPLICIT_HITM_UI"
       ],
-      "issues": [
-        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
-      ]
+      "issues": []
     },
     {
       "id": "T-012",
@@ -192,11 +190,9 @@
       ],
       "triggerCategory": "HUMAN_DECISION_GATE",
       "uiExposure": [
-        "GENERIC_COMMAND_ONLY"
+        "EXPLICIT_HITM_UI"
       ],
-      "issues": [
-        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
-      ]
+      "issues": []
     },
     {
       "id": "T-020",
@@ -223,11 +219,9 @@
       ],
       "triggerCategory": "HUMAN_DECISION_GATE",
       "uiExposure": [
-        "GENERIC_COMMAND_ONLY"
+        "EXPLICIT_HITM_UI"
       ],
-      "issues": [
-        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
-      ]
+      "issues": []
     },
     {
       "id": "T-022",
@@ -239,11 +233,9 @@
       ],
       "triggerCategory": "HUMAN_DECISION_GATE",
       "uiExposure": [
-        "GENERIC_COMMAND_ONLY"
+        "EXPLICIT_HITM_UI"
       ],
-      "issues": [
-        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
-      ]
+      "issues": []
     },
     {
       "id": "T-030",
@@ -273,11 +265,9 @@
       "uiExposure": [
         "ARTIFACT_TRIGGERED",
         "CONTROL_AUTO",
-        "GENERIC_COMMAND_ONLY"
+        "EXPLICIT_HITM_UI"
       ],
-      "issues": [
-        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
-      ]
+      "issues": []
     },
     {
       "id": "T-035",
@@ -658,11 +648,9 @@
       ],
       "triggerCategory": "HUMAN_DECISION_GATE",
       "uiExposure": [
-        "GENERIC_COMMAND_ONLY"
+        "EXPLICIT_HITM_UI"
       ],
-      "issues": [
-        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
-      ]
+      "issues": []
     },
     {
       "id": "T-082",
@@ -674,11 +662,9 @@
       ],
       "triggerCategory": "HUMAN_DECISION_GATE",
       "uiExposure": [
-        "GENERIC_COMMAND_ONLY"
+        "EXPLICIT_HITM_UI"
       ],
-      "issues": [
-        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
-      ]
+      "issues": []
     },
     {
       "id": "T-083",
@@ -776,11 +762,9 @@
       "triggerCategory": "HUMAN_DECISION_GATE",
       "uiExposure": [
         "CONTROL_AUTO",
-        "GENERIC_COMMAND_ONLY"
+        "EXPLICIT_HITM_UI"
       ],
-      "issues": [
-        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
-      ]
+      "issues": []
     },
     {
       "id": "T-094",
@@ -807,11 +791,9 @@
       "triggerCategory": "HUMAN_DECISION_GATE",
       "uiExposure": [
         "CONTROL_AUTO",
-        "GENERIC_COMMAND_ONLY"
+        "EXPLICIT_HITM_UI"
       ],
-      "issues": [
-        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
-      ]
+      "issues": []
     },
     {
       "id": "T-096",
@@ -824,11 +806,9 @@
       "triggerCategory": "HUMAN_DECISION_GATE",
       "uiExposure": [
         "CONTROL_AUTO",
-        "GENERIC_COMMAND_ONLY"
+        "EXPLICIT_HITM_UI"
       ],
-      "issues": [
-        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
-      ]
+      "issues": []
     },
     {
       "id": "T-097",
@@ -896,11 +876,9 @@
       ],
       "triggerCategory": "HUMAN_DECISION_GATE",
       "uiExposure": [
-        "GENERIC_COMMAND_ONLY"
+        "EXPLICIT_HITM_UI"
       ],
-      "issues": [
-        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
-      ]
+      "issues": []
     },
     {
       "id": "T-103A",
@@ -912,11 +890,9 @@
       ],
       "triggerCategory": "HUMAN_DECISION_GATE",
       "uiExposure": [
-        "GENERIC_COMMAND_ONLY"
+        "EXPLICIT_HITM_UI"
       ],
-      "issues": [
-        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
-      ]
+      "issues": []
     },
     {
       "id": "T-103B",
@@ -928,11 +904,9 @@
       ],
       "triggerCategory": "HUMAN_DECISION_GATE",
       "uiExposure": [
-        "GENERIC_COMMAND_ONLY"
+        "EXPLICIT_HITM_UI"
       ],
-      "issues": [
-        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
-      ]
+      "issues": []
     },
     {
       "id": "T-103C",
@@ -944,11 +918,9 @@
       ],
       "triggerCategory": "HUMAN_DECISION_GATE",
       "uiExposure": [
-        "GENERIC_COMMAND_ONLY"
+        "EXPLICIT_HITM_UI"
       ],
-      "issues": [
-        "Latent gate: humanApproval:ALWAYS but no explicit HITM UI path"
-      ]
+      "issues": []
     },
     {
       "id": "T-104",

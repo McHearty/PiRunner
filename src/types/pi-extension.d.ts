@@ -2,6 +2,7 @@ declare module '@earendil-works/pi-coding-agent' {
   export interface ExtensionUI {
     notify(message: string, type?: 'info' | 'warning' | 'error'): void;
     confirm(title: string, message: string): Promise<boolean>;
+    select(title: string, message: string, options: { id: string; label: string; detail?: string }[]): Promise<string>;
   }
 
   export interface ExtensionContext {
