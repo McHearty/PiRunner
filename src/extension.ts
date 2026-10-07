@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
@@ -41,6 +41,7 @@ export default function hitmHarnessExtension(pi: ExtensionAPI): void {
   let workflowId: string;
   let discovery = ProjectDiscoveryService.inspect(root);
   let cachedPiInitialPrompt: string | null = null;
+  let currentInvocationId: string | null = null;
 
   // Workflow identity management (Sprint 8)
   function resolveWorkflowIdentity(): { workflowId: string; controller: WorkflowController } {
@@ -653,10 +654,11 @@ ${deliverableInstruction}`;
       updateFooterStatus(ctx);
     });
 
-    // 2. Hook before_agent_start: Inject active role persona
+    // 2. Hook before_agent_start: Inject active role persona, track invocation
     (pi as any).on('before_agent_start', async (event: any, ctx: ExtensionContext) => {
       updateFooterStatus(ctx);
       const state = controller.getState();
+      currentInvocationId = `inv-${randomUUID()}`;
 
       if (state === 'REPOSITORY_CONFLICT') {
         await promptConflictResolution(ctx);
@@ -735,12 +737,13 @@ You have ZERO state transition authority. Transitions are strictly governed by P
 
       if (!rawText) return;
 
+      const taskId = `task-${currentState}-${randomUUID()}`;
       const ingestion = ArtifactIngestionService.ingestFromExecution(
-        { invocationId: `run-${Date.now()}`, status: 'COMPLETED', rawOutput: rawText },
+        { invocationId: currentInvocationId || `inv-${randomUUID()}`, status: 'COMPLETED', rawOutput: rawText },
         expectedType,
         workflowId,
-        `task-${currentState}`,
-        currentAgent.canonicalRole,
+        taskId,
+        currentAgent.id,
         validator,
         artifactStore as any
       );

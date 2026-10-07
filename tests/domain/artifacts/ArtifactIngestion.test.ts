@@ -55,7 +55,7 @@ describe('Closed-Loop Artifact Ingestion (§1, §12, §61)', () => {
       'ConceptPackage',
       'wf-loop-1',
       'task-1',
-      'CONCEPT',
+      '0012',
       validator,
       store
     );
@@ -65,13 +65,17 @@ describe('Closed-Loop Artifact Ingestion (§1, §12, §61)', () => {
     expect(controller.getState()).toBe('CONCEPT_REVIEW');
   });
 
-  it('ingests and auto-sanitizes KnowledgeSnapshot with minor model omissions', () => {
+  it('ingests KnowledgeSnapshot with complete required fields', () => {
     const rawOutput = `
 Here is the snapshot:
 \`\`\`json
 {
   "sourceRevision": "a1b2c3d4e5f6",
-  "relevantSourceFiles": [{ "path": "src/index.ts" }],
+  "dependencyLockHash": "${'a'.repeat(64)}",
+  "verifiedAt": "2026-10-07T00:00:00Z",
+  "freshnessPolicyVersion": "1.0.0",
+  "relevantSourceFiles": [{ "path": "src/index.ts", "contentHash": "${'b'.repeat(64)}" }],
+  "relevantSymbols": [],
   "dependencies": [{ "name": "vitest", "version": "2.1.9" }],
   "documentationRefs": [{ "identifier": "TECHSPEC.md" }]
 }
@@ -83,7 +87,7 @@ Here is the snapshot:
       'KnowledgeSnapshot',
       'wf-know-test',
       'task-know',
-      'KNOWLEDGE',
+      '0048',
       validator,
       store
     );
@@ -104,10 +108,15 @@ describe('0-Indexed AST Line Auto-Clamping (§12.8)', () => {
 \`\`\`json
 {
   "sourceRevision": "a1b2c3d4e5f6",
+  "dependencyLockHash": "${'a'.repeat(64)}",
+  "verifiedAt": "2026-10-07T00:00:00Z",
+  "freshnessPolicyVersion": "1.0.0",
+  "relevantSourceFiles": [],
   "relevantSymbols": [
     { "name": "rootSymbol", "kind": "function", "location": { "path": "src/index.ts", "line": 0, "column": 0 }, "exported": true }
   ],
-  "dependencies": [{ "name": "vitest", "version": "2.1.9" }]
+  "dependencies": [{ "name": "vitest", "version": "2.1.9" }],
+  "documentationRefs": []
 }
 \`\`\`
 `;
@@ -117,7 +126,7 @@ describe('0-Indexed AST Line Auto-Clamping (§12.8)', () => {
       'KnowledgeSnapshot',
       'wf-zero-test',
       'task-zero',
-      'KNOWLEDGE',
+      '0048',
       validator,
       store
     );
@@ -125,5 +134,100 @@ describe('0-Indexed AST Line Auto-Clamping (§12.8)', () => {
     expect(result.errors).toEqual([]);
     expect(result.success).toBe(true);
     expect(result.artifact?.payload.relevantSymbols[0].location.line).toBe(1);
+  });
+});
+
+describe('P0-A: Artifact Authority Invariants', () => {
+  const validator = new ArtifactValidator();
+  const store = new ArtifactStore(validator);
+
+  it('P0-A.1: Agent cannot self-declare ACCEPTED status', () => {
+    // Agent tries to set status via envelope field, not payload
+    const rawOutput = `
+\`\`\`json
+{
+  "artifactId": "art-should-be-ignored",
+  "status": "ACCEPTED",
+  "payload": {
+    "title": "Self-Declared Accepted",
+    "objectives": ["Test"],
+    "intendedUsers": ["Test"],
+    "majorCapabilities": ["Test"],
+    "constraints": [],
+    "assumptions": [],
+    "nonGoals": [],
+    "terminology": [],
+    "unresolvedQuestions": []
+  }
+}
+\`\`\`
+`;
+    const execution = { invocationId: 'inv-accepted', status: 'COMPLETED' as const, rawOutput };
+    const result = ArtifactIngestionService.ingestFromExecution(
+      execution,
+      'ConceptPackage',
+      'wf-authority',
+      'task-authority',
+      '0012',
+      validator,
+      store
+    );
+    expect(result.success).toBe(true);
+    expect(result.artifact?.status).toBe('SUBMITTED');
+  });
+
+  it('P0-A.2: Actual invocation identity survives ingestion', () => {
+    const rawOutput = `
+\`\`\`json
+{
+  "title": "Provenance Test",
+  "objectives": ["Test"],
+  "intendedUsers": ["Test"],
+  "majorCapabilities": ["Test"],
+  "constraints": [],
+  "assumptions": [],
+  "nonGoals": [],
+  "terminology": [],
+  "unresolvedQuestions": []
+}
+\`\`\`
+`;
+    const execution = { invocationId: 'inv-real-123', status: 'COMPLETED' as const, rawOutput };
+    const result = ArtifactIngestionService.ingestFromExecution(
+      execution,
+      'ConceptPackage',
+      'wf-authority',
+      'task-real',
+      '0055',
+      validator,
+      store
+    );
+    expect(result.success).toBe(true);
+    expect(result.artifact?.sourceRefs).toEqual([{ type: 'SESSION', identifier: 'inv-real-123' }]);
+    expect(result.artifact?.agentId).toBe('0055');
+    expect(result.artifact?.taskId).toBe('task-real');
+  });
+
+  it('P0-A.3: Malformed KnowledgeSnapshot fails validation (no synthetic defaults)', () => {
+    // Missing required sourceRevision and dependencyLockHash
+    const rawOutput = `
+\`\`\`json
+{
+  "relevantSourceFiles": [{ "path": "src/index.ts" }]
+}
+\`\`\`
+`;
+    const execution = { invocationId: 'inv-malformed', status: 'COMPLETED' as const, rawOutput };
+    const result = ArtifactIngestionService.ingestFromExecution(
+      execution,
+      'KnowledgeSnapshot',
+      'wf-authority',
+      'task-malformed',
+      '0048',
+      validator,
+      store
+    );
+    // Should fail validation, not be silently fixed
+    expect(result.success).toBe(false);
   });
 });
