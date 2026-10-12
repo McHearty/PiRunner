@@ -1,6 +1,6 @@
 # PiRunner
 
-[![Tests](https://img.shields.io/badge/tests-53%20passed-brightgreen.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-256%20passed-brightgreen.svg)](#)
 [![Agent Runtime](https://img.shields.io/badge/runtime-Pi%20Agent%20Harness-purple.svg)](https://github.com/earendil-works/pi)
 [![Language](https://img.shields.io/badge/language-TypeScript%205.5%20(NodeNext)-blue.svg)](#)
 [![Architecture](https://img.shields.io/badge/architecture-Hexagonal%20%2F%20HITM-orange.svg)](#)
@@ -38,7 +38,7 @@ PiRunner is explicitly **not** an autonomous multi-agent swarm. Human engineers 
 2. **Authoritative Test Authoring Before Implementation:** Acceptance tests are derived exclusively from accepted specifications by the test-authoring specialist before implementation begins. Tests never derive expected behavior from implementation control flow.
 3. **Immutable Test-Suite Locking:** Reaching `TEST_READY` hashes the declared test suite (SHA-256) into `.hitm/test-suite.lock.json`. The implementation agent consumes the suite as a read-only contract and cannot modify tests.
 4. **Deterministic Subprocess Test Execution:** Test results are evaluated by deterministic infrastructure (`RealDeterministicTestRunner`) in an isolated subprocess (`npm test`), never by an LLM self-reporting success.
-5. **Fail-Closed Guard Engine:** 83 transition guards actively verify live Git state, artifact schemas, review findings, and test locks. Any missing evaluator or unsatisfied condition immediately aborts the transition.
+5. **Fail-Closed Guard Engine:** 137 transition guards actively verify live Git state, artifact schemas, review findings, and test locks. Any missing evaluator or unsatisfied condition immediately aborts the transition.
 6. **Invocation-Scoped Sandboxing:** Tool calls are authorized per executing agent invocation. Destructive operations (`git push`, `git reset --hard`, `git checkout -f`, `rm -rf`) are blocked at the capability boundary.
 7. **Skill Anti-Proliferation Invariant:** A procedure graduates into a reusable skill only after **≥3 verified real uses** in event or devlog records.
 8. **Durable Resumption without Guesswork:** Restarting Pi replays `.hitm/events.jsonl` and independently validates Git revision, branch, working tree cleanliness, and test locks before allowing continuation.
@@ -119,7 +119,7 @@ npm test
 Deploy the compiled extension to your local repository:
 ```bash
 mkdir -p .pi/agent/extensions
-cp dist/extension.js .pi/agent/extensions/hitm.js
+cp dist/src/extension.js .pi/agent/extensions/hitm.js
 ```
 
 ### 3. Launch Pi
@@ -129,7 +129,7 @@ Run Pi with your local or cloud model:
 pi --model <local-model-name>
 
 # Or passing the extension directly:
-pi --extension ./dist/extension.js
+pi --extension ./dist/src/extension.js
 ```
 
 ---
