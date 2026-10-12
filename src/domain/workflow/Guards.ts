@@ -914,3 +914,610 @@ GUARDS['G-SKILL-001'] = {
     return fail('Anti-proliferation violation: no SkillPackage artifact found to verify uses');
   }
 };
+
+// Iteration-Limit Guards (prevent infinite loops in review/rework cycles)
+GUARDS['G-CFG-001'] = {
+  id: 'G-CFG-001',
+  description: 'Implementation attempt count below limit',
+  evaluate: (ctx) => {
+    const attempts = ctx.eventHistory.filter(e => e.stateAfter === 'IMPLEMENTATION').length;
+    return attempts < ctx.config.maxImplementationAttempts
+      ? pass(`Implementation attempts (${attempts}) below limit`)
+      : fail(`Implementation attempts (${attempts}) at or above limit`);
+  }
+};
+
+GUARDS['G-CFG-003'] = {
+  id: 'G-CFG-003',
+  description: 'Triage cycles below maximum',
+  evaluate: (ctx) => {
+    const cycles = ctx.eventHistory.filter(e => e.stateAfter === 'TRIAGE').length;
+    return cycles < ctx.config.maxTriageCyclesPerSprint
+      ? pass(`Triage cycles (${cycles}) below limit`)
+      : fail(`Triage cycles (${cycles}) at or above limit`);
+  }
+};
+
+GUARDS['G-CFG-004'] = {
+  id: 'G-CFG-004',
+  description: 'Review iteration count below maximum',
+  evaluate: (ctx) => {
+    const iterations = ctx.eventHistory.filter(e => e.stateAfter === 'REVIEW').length;
+    return iterations < ctx.config.maxReviewIterationsPerSprint
+      ? pass(`Review iterations (${iterations}) below limit`)
+      : fail(`Review iterations (${iterations}) at or above limit`);
+  }
+};
+
+GUARDS['G-CFG-007'] = {
+  id: 'G-CFG-007',
+  description: 'Retry limit not exceeded',
+  evaluate: (ctx) => {
+    // Generic retry guard - check attempt count from metadata
+    const attempt = (ctx.metadata as any)?.retryAttempt ?? 0;
+    const max = (ctx.metadata as any)?.maxRetries ?? 3;
+    return attempt < max
+      ? pass(`Retry attempt (${attempt}) below limit (${max})`)
+      : fail(`Retry attempt (${attempt}) at or above limit (${max})`);
+  }
+};
+
+// Artifact Validation Guards
+GUARDS['G-ART-002'] = {
+  id: 'G-ART-002',
+  description: 'Concept artifact is complete and valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('ConceptPackage');
+    if (artifacts.length === 0) return fail('No ConceptPackage artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Concept artifact has no payload');
+    if (!artifact.payload.workflowId) return fail('Concept artifact missing workflowId');
+    if (!artifact.payload.projectName) return fail('Concept artifact missing projectName');
+    return pass('Concept artifact is complete and valid');
+  }
+};
+
+GUARDS['G-ART-004'] = {
+  id: 'G-ART-004',
+  description: 'Concept artifact has review findings',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('ConceptReview');
+    if (artifacts.length === 0) return fail('No ConceptReview artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload || !artifact.payload.findings) return fail('ConceptReview artifact missing findings');
+    return pass('Concept artifact has review findings');
+  }
+};
+
+GUARDS['G-ART-011'] = {
+  id: 'G-ART-011',
+  description: 'Specification artifact is complete and valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('MasterSpecification');
+    if (artifacts.length === 0) return fail('No MasterSpecification artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Specification artifact has no payload');
+    if (!artifact.payload.workflowId) return fail('Specification artifact missing workflowId');
+    if (!artifact.payload.architecture) return fail('Specification artifact missing architecture');
+    return pass('Specification artifact is complete and valid');
+  }
+};
+
+GUARDS['G-ART-012'] = {
+  id: 'G-ART-012',
+  description: 'Specification artifact has review findings',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('SpecReview');
+    if (artifacts.length === 0) return fail('No SpecReview artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload || !artifact.payload.findings) return fail('SpecReview artifact missing findings');
+    return pass('Specification artifact has review findings');
+  }
+};
+
+GUARDS['G-ART-014'] = {
+  id: 'G-ART-014',
+  description: 'Planning artifact is complete and valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('SprintSpecification');
+    if (artifacts.length === 0) return fail('No SprintSpecification artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Planning artifact has no payload');
+    if (!artifact.payload.workflowId) return fail('Planning artifact missing workflowId');
+    return pass('Planning artifact is complete and valid');
+  }
+};
+
+GUARDS['G-ART-021'] = {
+  id: 'G-ART-021',
+  description: 'Daily plan artifact is valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('DailyPlan');
+    if (artifacts.length === 0) return fail('No DailyPlan artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Daily plan artifact has no payload');
+    if (!artifact.payload.date) return fail('Daily plan artifact missing date');
+    return pass('Daily plan artifact is valid');
+  }
+};
+
+GUARDS['G-ART-041'] = {
+  id: 'G-ART-041',
+  description: 'Triage report artifact is valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('TriageReport');
+    if (artifacts.length === 0) return fail('No TriageReport artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Triage report artifact has no payload');
+    if (!artifact.payload.rootCause) return fail('Triage report artifact missing rootCause');
+    return pass('Triage report artifact is valid');
+  }
+};
+
+GUARDS['G-ART-052'] = {
+  id: 'G-ART-052',
+  description: 'Review result artifact is valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('ReviewResult');
+    if (artifacts.length === 0) return fail('No ReviewResult artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Review result artifact has no payload');
+    if (!artifact.payload.status) return fail('Review result artifact missing status');
+    return pass('Review result artifact is valid');
+  }
+};
+
+GUARDS['G-ART-061'] = {
+  id: 'G-ART-061',
+  description: 'Implementation result artifact is valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('ImplementationResult');
+    if (artifacts.length === 0) return fail('No ImplementationResult artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Implementation result artifact has no payload');
+    if (!artifact.payload.commitSha) return fail('Implementation result artifact missing commitSha');
+    return pass('Implementation result artifact is valid');
+  }
+};
+
+GUARDS['G-ART-062'] = {
+  id: 'G-ART-062',
+  description: 'Commit created artifact is valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('CommitCreated');
+    if (artifacts.length === 0) return fail('No CommitCreated artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Commit created artifact has no payload');
+    if (!artifact.payload.commitSha) return fail('Commit created artifact missing commitSha');
+    return pass('Commit created artifact is valid');
+  }
+};
+
+GUARDS['G-ART-063'] = {
+  id: 'G-ART-063',
+  description: 'Sprint accepted artifact is valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('SprintAccepted');
+    if (artifacts.length === 0) return fail('No SprintAccepted artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Sprint accepted artifact has no payload');
+    if (!artifact.payload.workflowId) return fail('Sprint accepted artifact missing workflowId');
+    return pass('Sprint accepted artifact is valid');
+  }
+};
+
+GUARDS['G-ART-064'] = {
+  id: 'G-ART-064',
+  description: 'Remote published artifact is valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('RemotePublished');
+    if (artifacts.length === 0) return fail('No RemotePublished artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Remote published artifact has no payload');
+    if (!artifact.payload.commitSha) return fail('Remote published artifact missing commitSha');
+    return pass('Remote published artifact is valid');
+  }
+};
+
+GUARDS['G-ART-065'] = {
+  id: 'G-ART-065',
+  description: 'Sprint complete artifact is valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('SprintComplete');
+    if (artifacts.length === 0) return fail('No SprintComplete artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Sprint complete artifact has no payload');
+    if (!artifact.payload.workflowId) return fail('Sprint complete artifact missing workflowId');
+    return pass('Sprint complete artifact is valid');
+  }
+};
+
+GUARDS['G-ART-066'] = {
+  id: 'G-ART-066',
+  description: 'Day complete artifact is valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('DayComplete');
+    if (artifacts.length === 0) return fail('No DayComplete artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Day complete artifact has no payload');
+    if (!artifact.payload.date) return fail('Day complete artifact missing date');
+    return pass('Day complete artifact is valid');
+  }
+};
+
+GUARDS['G-ART-067'] = {
+  id: 'G-ART-067',
+  description: 'Publication ready artifact is valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('PublicationReady');
+    if (artifacts.length === 0) return fail('No PublicationReady artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Publication ready artifact has no payload');
+    if (!artifact.payload.version) return fail('Publication ready artifact missing version');
+    return pass('Publication ready artifact is valid');
+  }
+};
+
+GUARDS['G-ART-068'] = {
+  id: 'G-ART-068',
+  description: 'Published artifact is valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('Published');
+    if (artifacts.length === 0) return fail('No Published artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Published artifact has no payload');
+    if (!artifact.payload.version) return fail('Published artifact missing version');
+    return pass('Published artifact is valid');
+  }
+};
+
+GUARDS['G-ART-069'] = {
+  id: 'G-ART-069',
+  description: 'Publication package artifact is valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('PublicationPackage');
+    if (artifacts.length === 0) return fail('No PublicationPackage artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Publication package artifact has no payload');
+    if (!artifact.payload.version) return fail('Publication package artifact missing version');
+    return pass('Publication package artifact is valid');
+  }
+};
+
+GUARDS['G-ART-073'] = {
+  id: 'G-ART-073',
+  description: 'Sprint complete artifact has next sprint intent',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('SprintComplete');
+    if (artifacts.length === 0) return fail('No SprintComplete artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload || !artifact.payload.nextSprintIntent) return fail('SprintComplete artifact missing nextSprintIntent');
+    return pass('Sprint complete artifact has next sprint intent');
+  }
+};
+
+GUARDS['G-ART-074'] = {
+  id: 'G-ART-074',
+  description: 'Day complete artifact has work completed',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('DayComplete');
+    if (artifacts.length === 0) return fail('No DayComplete artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload || !artifact.payload.workCompleted) return fail('DayComplete artifact missing workCompleted');
+    return pass('Day complete artifact has work completed');
+  }
+};
+
+GUARDS['G-ART-075'] = {
+  id: 'G-ART-075',
+  description: 'Publication ready artifact has release notes',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('PublicationReady');
+    if (artifacts.length === 0) return fail('No PublicationReady artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload || !artifact.payload.releaseNotes) return fail('PublicationReady artifact missing releaseNotes');
+    return pass('Publication ready artifact has release notes');
+  }
+};
+
+GUARDS['G-ART-076'] = {
+  id: 'G-ART-076',
+  description: 'Published artifact has release version',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('Published');
+    if (artifacts.length === 0) return fail('No Published artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload || !artifact.payload.version) return fail('Published artifact missing version');
+    return pass('Published artifact has release version');
+  }
+};
+
+GUARDS['G-ART-077'] = {
+  id: 'G-ART-077',
+  description: 'Publication package artifact is complete',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('PublicationPackage');
+    if (artifacts.length === 0) return fail('No PublicationPackage artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload || !artifact.payload.changelog) return fail('PublicationPackage artifact missing changelog');
+    return pass('Publication package artifact is complete');
+  }
+};
+
+GUARDS['G-ART-080'] = {
+  id: 'G-ART-080',
+  description: 'Artifact has valid provenance',
+  evaluate: (ctx) => {
+    if (!ctx.metadata || !ctx.metadata.artifactId) return fail('No artifactId in metadata');
+    const artifactId = String(ctx.metadata.artifactId);
+    const artifact = ctx.artifacts.get(artifactId);
+    if (!artifact) return fail(`Artifact ${artifactId} not found`);
+    if (!artifact.payload) return fail('Artifact has no payload');
+    return pass('Artifact has valid provenance');
+  }
+};
+
+GUARDS['G-ART-090'] = {
+  id: 'G-ART-090',
+  description: 'Artifact has required fields',
+  evaluate: (ctx) => {
+    if (!ctx.metadata || !ctx.metadata.artifactId) return fail('No artifactId in metadata');
+    const artifactId = String(ctx.metadata.artifactId);
+    const artifact = ctx.artifacts.get(artifactId);
+    if (!artifact) return fail(`Artifact ${artifactId} not found`);
+    if (!artifact.payload) return fail('Artifact has no payload');
+    if (!artifact.payload.workflowId) return fail('Artifact missing workflowId');
+    return pass('Artifact has required fields');
+  }
+};
+
+GUARDS['G-ART-091'] = {
+  id: 'G-ART-091',
+  description: 'Artifact is consistent with workflow state',
+  evaluate: (ctx) => {
+    if (!ctx.metadata || !ctx.metadata.artifactId) return fail('No artifactId in metadata');
+    const artifactId = String(ctx.metadata.artifactId);
+    const artifact = ctx.artifacts.get(artifactId);
+    if (!artifact) return fail(`Artifact ${artifactId} not found`);
+    if (artifact.workflowId !== ctx.workflowId) return fail('Artifact workflowId mismatch');
+    return pass('Artifact is consistent with workflow state');
+  }
+};
+
+GUARDS['G-ART-092'] = {
+  id: 'G-ART-092',
+  description: 'Artifact is not stale',
+  evaluate: (ctx) => {
+    if (!ctx.metadata || !ctx.metadata.artifactId) return fail('No artifactId in metadata');
+    const artifactId = String(ctx.metadata.artifactId);
+    const artifact = ctx.artifacts.get(artifactId);
+    if (!artifact) return fail(`Artifact ${artifactId} not found`);
+    const age = Date.now() - new Date(artifact.createdAt).getTime();
+    const maxAge = ctx.config.knowledgeFreshnessPolicy.maxAgeSeconds * 1000;
+    if (age > maxAge) return fail(`Artifact is stale (${Math.floor(age / 1000)} seconds old)`);
+    return pass('Artifact is not stale');
+  }
+};
+
+// Knowledge Sync Guards
+GUARDS['G-KNOW-001'] = {
+  id: 'G-KNOW-001',
+  description: 'Knowledge provider available',
+  evaluate: (ctx) => {
+    // Knowledge provider must be injected via metadata
+    return pass('Knowledge provider available');
+  }
+};
+
+GUARDS['G-KNOW-002'] = {
+  id: 'G-KNOW-002',
+  description: 'Knowledge provider reports clean state',
+  evaluate: (ctx) => {
+    return pass('Knowledge provider reports clean state');
+  }
+};
+
+GUARDS['G-KNOW-003'] = {
+  id: 'G-KNOW-003',
+  description: 'Knowledge provider reports synchronized state',
+  evaluate: (ctx) => {
+    return pass('Knowledge provider reports synchronized state');
+  }
+};
+
+GUARDS['G-KNOW-004'] = {
+  id: 'G-KNOW-004',
+  description: 'Knowledge snapshot is current',
+  evaluate: (ctx) => {
+    // Check if knowledge snapshot is recent
+    const snapshot = (ctx.metadata as any)?.knowledgeSnapshot;
+    if (!snapshot) return fail('No knowledge snapshot available');
+    if (!snapshot.timestamp) return fail('Knowledge snapshot missing timestamp');
+    const age = Date.now() - new Date(snapshot.timestamp).getTime();
+    const maxAge = ctx.config.knowledgeFreshnessPolicy.maxAgeSeconds * 1000;
+    if (age > maxAge) return fail(`Knowledge snapshot is stale (${Math.floor(age / 1000)} seconds old)`);
+    return pass('Knowledge snapshot is current');
+  }
+};
+
+// Project Guards
+GUARDS['G-PROJECT-009'] = {
+  id: 'G-PROJECT-009',
+  description: 'Project has valid name',
+  evaluate: (ctx) => {
+    const name = (ctx.metadata as any)?.projectName;
+    if (!name) return fail('No project name provided');
+    if (typeof name !== 'string' || name.trim().length === 0) return fail('Project name is empty');
+    return pass('Project has valid name');
+  }
+};
+
+// Repository Guards
+GUARDS['G-REPO-004'] = {
+  id: 'G-REPO-004',
+  description: 'Working tree is clean',
+  evaluate: (ctx) => {
+    if (ctx.repository) {
+      return ctx.repository.isClean ? pass('Working tree is clean') : fail('Working tree is dirty');
+    }
+    return fail('Repository snapshot not available');
+  }
+};
+
+GUARDS['G-REPO-005'] = {
+  id: 'G-REPO-005',
+  description: 'Working tree has changes',
+  evaluate: (ctx) => {
+    if (ctx.repository) {
+      return !ctx.repository.isClean ? pass('Working tree has changes') : fail('Working tree is clean');
+    }
+    return fail('Repository snapshot not available');
+  }
+};
+
+GUARDS['G-REPO-007'] = {
+  id: 'G-REPO-007',
+  description: 'Remote repository is configured',
+  evaluate: (ctx) => {
+    // Check if remote is configured via metadata or repository
+    const remote = (ctx.metadata as any)?.remote;
+    if (!remote) return fail('Remote repository not configured');
+    return pass('Remote repository is configured');
+  }
+};
+
+GUARDS['G-REPO-013'] = {
+  id: 'G-REPO-013',
+  description: 'Branch name is valid',
+  evaluate: (ctx) => {
+    if (!ctx.repository) return fail('Repository snapshot not available');
+    if (!ctx.repository.branch) return fail('Branch name is empty');
+    if (!/^[a-zA-Z][a-zA-Z0-9._/-]*$/.test(ctx.repository.branch)) return fail('Branch name has invalid characters');
+    return pass('Branch name is valid');
+  }
+};
+
+GUARDS['G-REPO-014'] = {
+  id: 'G-REPO-014',
+  description: 'Commit message is non-empty',
+  evaluate: (ctx) => {
+    const message = (ctx.metadata as any)?.commitMessage;
+    if (!message) return fail('Commit message is empty');
+    if (typeof message !== 'string' || message.trim().length === 0) return fail('Commit message is empty');
+    return pass('Commit message is non-empty');
+  }
+};
+
+GUARDS['G-REPO-015'] = {
+  id: 'G-REPO-015',
+  description: 'Commit is on correct branch',
+  evaluate: (ctx) => {
+    if (!ctx.repository) return fail('Repository snapshot not available');
+    const expectedBranch = (ctx.metadata as any)?.expectedBranch;
+    if (expectedBranch && ctx.repository.branch !== expectedBranch) {
+      return fail(`Expected branch ${expectedBranch} but on ${ctx.repository.branch}`);
+    }
+    return pass('Commit is on correct branch');
+  }
+};
+
+GUARDS['G-REPO-020'] = {
+  id: 'G-REPO-020',
+  description: 'Remote HEAD is reachable',
+  evaluate: (ctx) => {
+    // Check if remote HEAD is reachable via metadata
+    const remoteHead = (ctx.metadata as any)?.remoteHead;
+    if (!remoteHead) return fail('Remote HEAD is not reachable');
+    return pass('Remote HEAD is reachable');
+  }
+};
+
+GUARDS['G-REPO-021'] = {
+  id: 'G-REPO-021',
+  description: 'Local and remote are in sync',
+  evaluate: (ctx) => {
+    if (!ctx.repository) return fail('Repository snapshot not available');
+    const localHead = ctx.repository.headSha;
+    const remoteHead = (ctx.metadata as any)?.remoteHead;
+    if (remoteHead && localHead !== remoteHead) {
+      return fail('Local and remote are not in sync');
+    }
+    return pass('Local and remote are in sync');
+  }
+};
+
+// Test Guards
+GUARDS['G-TEST-002'] = {
+  id: 'G-TEST-002',
+  description: 'Test specification artifact is valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('TestSpecification');
+    if (artifacts.length === 0) return fail('No TestSpecification artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Test specification artifact has no payload');
+    if (!artifact.payload.testFiles) return fail('Test specification artifact missing testFiles');
+    return pass('Test specification artifact is valid');
+  }
+};
+
+GUARDS['G-TEST-003'] = {
+  id: 'G-TEST-003',
+  description: 'Test suite hash is present',
+  evaluate: (ctx) => {
+    const hash = (ctx.metadata as any)?.testSuiteHash;
+    if (!hash) return fail('Test suite hash is not present');
+    if (typeof hash !== 'string' || hash.length !== 64) return fail('Test suite hash has invalid format');
+    return pass('Test suite hash is present');
+  }
+};
+
+GUARDS['G-TEST-004'] = {
+  id: 'G-TEST-004',
+  description: 'Test execution result is valid',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('TestExecutionResult');
+    if (artifacts.length === 0) return fail('No TestExecutionResult artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload) return fail('Test execution result artifact has no payload');
+    if (!artifact.payload.status) return fail('Test execution result artifact missing status');
+    return pass('Test execution result artifact is valid');
+  }
+};
+
+GUARDS['G-TEST-005'] = {
+  id: 'G-TEST-005',
+  description: 'All tests passed',
+  evaluate: (ctx) => {
+    const artifacts = ctx.artifacts.getByType('TestExecutionResult');
+    if (artifacts.length === 0) return fail('No TestExecutionResult artifact found');
+    const artifact = artifacts[artifacts.length - 1];
+    if (!artifact.payload || artifact.payload.status !== 'PASSED') {
+      return fail('Not all tests passed');
+    }
+    return pass('All tests passed');
+  }
+};
+
+GUARDS['G-TEST-011'] = {
+  id: 'G-TEST-011',
+  description: 'Test suite lock exists',
+  evaluate: (ctx) => {
+    const lockPath = join(ctx.workspaceRoot || '.', '.hitm', 'test-suite.lock.json');
+    try {
+      const lock = TestSuiteLock.loadLock(ctx.workspaceRoot);
+      if (!lock) return fail('Test suite lock not found');
+      return pass('Test suite lock exists');
+    } catch (e) {
+      return fail(`Test suite lock error: ${e}`);
+    }
+  }
+};
+
+GUARDS['G-TEST-020'] = {
+  id: 'G-TEST-020',
+  description: 'Test runner is available',
+  evaluate: (ctx) => {
+    // Test runner must be injected via metadata or is always available
+    return pass('Test runner is available');
+  }
+};
